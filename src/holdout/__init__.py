@@ -21,6 +21,7 @@ from .multiple import (
     minimum_sharpe,
     minimum_t_statistic,
 )
+from .pbo import PBOResult, cscv_partitions, probability_of_backtest_overfitting
 from .series import as_matrix, as_returns
 from .sharpe import (
     SharpeRatio,
@@ -40,6 +41,7 @@ __all__ = [
     "HoldoutError",
     "InsufficientDataError",
     "Moments",
+    "PBOResult",
     "SharpeRatio",
     "ValidationError",
     "__version__",
@@ -48,6 +50,7 @@ __all__ = [
     "as_returns",
     "autocorrelation",
     "autocorrelation_adjusted_sharpe",
+    "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
     "effective_number_of_trials",
@@ -62,6 +65,7 @@ __all__ = [
     "minimum_track_record_length",
     "moments",
     "probabilistic_sharpe_ratio",
+    "probability_of_backtest_overfitting",
     "serial_correlation_factor",
     "sharpe_ratio",
     "sharpe_standard_error",
