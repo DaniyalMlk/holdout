@@ -67,3 +67,56 @@ What was measured:
 serial-correlation factor in place of `sqrt(q)`. Smoothed or illiquid marks
 produce positive autocorrelation, and positive autocorrelation is exactly the
 case where the naive annualisation flatters a strategy.
+
+## Probabilistic and deflated Sharpe ratio
+
+```python
+from holdout import (
+    deflate_trials, effective_number_of_trials, minimum_track_record_length,
+    probabilistic_sharpe_ratio, trial_correlation,
+)
+
+probabilistic_sharpe_ratio(0.1, 1250, benchmark=0.0, skewness=-0.5, kurtosis=6.0)
+minimum_track_record_length(0.1, confidence=0.95)          # periods needed
+
+# trials: a (periods, variants) matrix of every variant that was backtested
+result = deflate_trials(trials)                             # best column, N = columns
+n_eff = effective_number_of_trials(trial_correlation(trials), method="eigenvalue")
+result = deflate_trials(trials, n_trials=n_eff)
+result.probabilistic, result.deflated, result.expected_maximum
+```
+
+The probabilistic Sharpe ratio is the probability that the true ratio exceeds a
+benchmark. The deflated Sharpe ratio raises that benchmark to the ratio the
+best of `N` unskilled trials would be expected to show: the null for a
+*selected* strategy is not "no skill" but "the best of `N` attempts at no
+skill".
+
+What was measured:
+
+| Check | Result |
+| --- | --- |
+| Bailey and López de Prado (2014) worked example | SR0 = 0.1132 and DSR = 0.9004, as published |
+| Exact expected maximum of `N` normals vs SciPy quadrature | agree to 1e-9 |
+| The paper's closed-form approximation vs exact | +2.6% at 5 trials, +0.9% at 100, +0.1% at 10^6; -7.9% at 2 |
+| 50 pure-noise strategies, best selected, 200 runs | PSR(0) > 95% in over 80% of runs; DSR > 95% in none |
+| 49 noise strategies plus one with per-period SR 0.2 over 500 days | DSR > 95% in 53% of runs |
+
+The last two rows are the practical point. Selecting the best of fifty
+backtests makes a coin flip look like a discovery nine times out of ten; and
+even an annualised Sharpe ratio above 3, hidden among forty-nine others, only
+survives deflation half the time on two years of data.
+
+One detail worth knowing: the paper's 0.9004 is computed from the unrounded
+benchmark 0.113172. Recomputing from the printed 0.1132 gives 0.90026. The
+test suite records both so that nobody bends the formula to match a
+recomputation from rounded figures.
+
+**Correlated trials.** The deflation assumes the `N` trials are independent;
+a parameter sweep is not. `effective_number_of_trials` takes a correlation
+matrix and one of three estimators, and the method is a required argument
+because they disagree between the extremes. Six near-copies plus four
+independent strategies count as 6.0 (eigenvalue, Li and Ji 2005), 7.0
+(average correlation) or 2.5 (participation ratio). The eigenvalue method is
+exact for blocks of identical trials but jumps where an eigenvalue crosses an
+integer; the participation ratio is smooth but dominated by the largest block.

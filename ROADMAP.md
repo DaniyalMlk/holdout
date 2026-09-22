@@ -16,11 +16,11 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 2 — Probabilistic and deflated Sharpe ratio
 
-- [ ] Probabilistic Sharpe ratio against an arbitrary benchmark
-- [ ] Minimum track record length
-- [ ] Expected maximum Sharpe ratio across independent trials, checked against simulation
-- [ ] Deflated Sharpe ratio reproducing the published worked example
-- [ ] Effective number of independent trials from a correlation matrix of trial returns
+- [x] Probabilistic Sharpe ratio against an arbitrary benchmark
+- [x] Minimum track record length
+- [x] Expected maximum Sharpe ratio across independent trials, checked against simulation
+- [x] Deflated Sharpe ratio reproducing the published worked example
+- [x] Effective number of independent trials from a correlation matrix of trial returns
 
 ## Phase 3 — Multiple testing
 

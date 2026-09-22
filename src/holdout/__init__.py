@@ -22,6 +22,7 @@ from .sharpe import (
     sharpe_ratio,
     sharpe_standard_error,
 )
+from .trials import effective_number_of_trials, trial_correlation
 
 __version__ = "0.1.0"
 
@@ -39,6 +40,7 @@ __all__ = [
     "autocorrelation_adjusted_sharpe",
     "deflate_trials",
     "deflated_sharpe_ratio",
+    "effective_number_of_trials",
     "estimate_sharpe",
     "expected_maximum_normal",
     "expected_maximum_sharpe",
@@ -50,4 +52,5 @@ __all__ = [
     "sharpe_ratio",
     "sharpe_standard_error",
     "skewness",
+    "trial_correlation",
 ]
