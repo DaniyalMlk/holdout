@@ -227,3 +227,16 @@ def test_under_the_null_the_undeflated_ratio_is_fooled_and_the_deflated_is_not()
         dsr_hits += result.deflated > 0.95
     assert psr_hits / reps > 0.8
     assert dsr_hits / reps <= 0.05
+
+
+def test_a_genuine_edge_among_noise_survives_deflation_only_sometimes() -> None:
+    # One strategy with per-period SR 0.2 (annualised ~3.2) hidden among 49
+    # noise strategies over 500 periods: the README reports it clears DSR 95%
+    # about half the time.
+    rng = np.random.default_rng(1)
+    reps, hits = 200, 0
+    for _ in range(reps):
+        x = rng.normal(size=(500, 50))
+        x[:, 0] += 0.2
+        hits += deflate_trials(x * 0.01).deflated > 0.95
+    assert 0.40 < hits / reps < 0.66
