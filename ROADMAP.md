@@ -8,19 +8,19 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 1 — Return series and Sharpe ratio inference
 
-- [ ] Return series validation with errors that name the offending observation
-- [ ] Sample skewness and kurtosis with the bias convention stated, checked against SciPy
-- [ ] Sharpe ratio with annualisation, and its standard error under normal (Lo) and non-normal (Mertens) returns
-- [ ] Serial-correlation-adjusted annualisation (Lo)
-- [ ] Packaging, type checking, linting and continuous integration
+- [x] Return series validation with errors that name the offending observation
+- [x] Sample skewness and kurtosis with the bias convention stated, checked against SciPy
+- [x] Sharpe ratio with annualisation, and its standard error under normal (Lo) and non-normal (Mertens) returns
+- [x] Serial-correlation-adjusted annualisation (Lo)
+- [x] Packaging, type checking, linting and continuous integration
 
 ## Phase 2 — Probabilistic and deflated Sharpe ratio
 
-- [ ] Probabilistic Sharpe ratio against an arbitrary benchmark
-- [ ] Minimum track record length
-- [ ] Expected maximum Sharpe ratio across independent trials, checked against simulation
-- [ ] Deflated Sharpe ratio reproducing the published worked example
-- [ ] Effective number of independent trials from a correlation matrix of trial returns
+- [x] Probabilistic Sharpe ratio against an arbitrary benchmark
+- [x] Minimum track record length
+- [x] Expected maximum Sharpe ratio across independent trials, checked against simulation
+- [x] Deflated Sharpe ratio reproducing the published worked example
+- [x] Effective number of independent trials from a correlation matrix of trial returns
 
 ## Phase 3 — Multiple testing
 
