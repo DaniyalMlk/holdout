@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .bootstrap import optimal_block_length, stationary_bootstrap_indices
 from .deflated import (
     DeflatedSharpe,
     deflate_trials,
@@ -31,6 +32,14 @@ from .sharpe import (
     sharpe_ratio,
     sharpe_standard_error,
 )
+from .spa import (
+    RealityCheck,
+    RomanoWolf,
+    SPATest,
+    reality_check,
+    romano_wolf,
+    superior_predictive_ability,
+)
 from .splits import (
     CombinatorialPurgedCV,
     LeakageError,
@@ -55,6 +64,9 @@ __all__ = [
     "LeakageError",
     "Moments",
     "PBOResult",
+    "RealityCheck",
+    "RomanoWolf",
+    "SPATest",
     "SharpeRatio",
     "Split",
     "ValidationError",
@@ -82,13 +94,18 @@ __all__ = [
     "minimum_track_record_length",
     "moments",
     "number_of_paths",
+    "optimal_block_length",
     "probabilistic_sharpe_ratio",
     "probability_of_backtest_overfitting",
     "purged_kfold",
+    "reality_check",
+    "romano_wolf",
     "serial_correlation_factor",
     "sharpe_ratio",
     "sharpe_standard_error",
     "skewness",
+    "stationary_bootstrap_indices",
+    "superior_predictive_ability",
     "trial_correlation",
     "walk_forward",
 ]

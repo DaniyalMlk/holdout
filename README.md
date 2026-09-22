@@ -224,3 +224,43 @@ runs purged k-fold over random label lengths, embargoes and fold counts and
 requires the audit to pass; plain k-fold on five-period labels is required to
 fail it. The CPCV tests check the path count against `k/N * C(N, k)` and that
 every path covers each observation exactly once.
+
+## Tests of superior predictive ability
+
+```python
+from holdout import reality_check, romano_wolf, superior_predictive_ability
+
+# differentials: (periods, strategies) of strategy return minus benchmark return
+reality_check(differentials, seed=0).pvalue
+spa = superior_predictive_ability(differentials, seed=0)
+spa.consistent                     # bounded by spa.lower and spa.upper
+romano_wolf(differentials, alpha=0.05, seed=0).rejected   # which ones, strongest first
+```
+
+These answer "does anything here beat the benchmark?" without assuming the
+strategies are independent of each other or over time. All three resample
+whole rows with the stationary bootstrap (Politis and Romano 1994), so every
+strategy is resampled on the same days and the correlation between them is
+kept. The block length defaults to the Politis–White (2004, corrected 2009)
+estimate.
+
+- **White's Reality Check** (2000) is valid but recentres every strategy to
+  mean zero, so hopeless strategies count as contenders and dilute it.
+- **Hansen's SPA test** (2005) studentises and leaves clearly inferior
+  strategies at their negative mean. `consistent` is the p-value to report.
+- **Romano–Wolf** (2005) stepdown names the strategies that beat the
+  benchmark while controlling the family-wise error rate.
+
+What was measured:
+
+| Check | Result |
+| --- | --- |
+| Block length vs the AR(1) closed form, n = 10,000–20,000 | within 10% on average for phi = 0.3, 0.5, 0.7 |
+| Size at the least favourable null (6 strategies, 2000 runs, nominal 5%) | Reality Check 4.9%, SPA 5.4%, Romano–Wolf 5.5% |
+| One strategy at the benchmark plus nine poor ones (300 runs) | Reality Check rejects 0.7% of the time, SPA 6.0% |
+| One genuine strategy plus nine poor ones (300 runs) | SPA rejects 87% of the time, the Reality Check 56% |
+| Romano–Wolf, two genuine strategies among eight | both found in every one of 300 runs |
+
+The third and fourth rows are Hansen's argument in numbers: the Reality Check
+is not wrong, but every poor strategy added to the set makes it harder for a
+good one to register.
