@@ -59,7 +59,7 @@ addopts = "-q"
 
 [tool.mypy]
 strict = true
-files = ["src/holdout", "tests"]
+files = ["src/holdout", "tests", "examples"]
 
 [[tool.mypy.overrides]]
 module = ["scipy.*"]
