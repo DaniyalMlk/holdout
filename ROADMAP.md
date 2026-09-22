@@ -53,7 +53,7 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 7 — Command line and examples
 
-- [ ] CSV loading for single series and strategy matrices
-- [ ] `holdout` command with `sharpe`, `deflate`, `pbo`, `spa` and `sample-data`
-- [ ] Worked examples runnable end to end
-- [ ] Clean-wheel installation checked in continuous integration
+- [x] CSV loading for single series and strategy matrices
+- [x] `holdout` command with `sharpe`, `deflate`, `pbo`, `spa` and `sample-data`
+- [x] Worked examples runnable end to end
+- [x] Clean-wheel installation checked in continuous integration

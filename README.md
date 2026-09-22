@@ -24,6 +24,87 @@ python -m pytest
 Python 3.10 or later. The only runtime dependency is NumPy; SciPy is used in
 the test suite as an independent reference.
 
+## Command line
+
+Installing the package provides a `holdout` command. `sample-data` writes two
+synthetic parameter sweeps — thirty moving-average crossover rules on ten
+years of simulated GARCH prices, one market with nothing to find and one with
+a slow cyclical drift — so everything below runs without real data.
+
+```bash
+holdout sample-data --out sample
+holdout deflate sample/sweep.csv
+```
+
+```
+30 trials over 2520 periods
+effective trials: average 11.5, eigenvalue 10.0, participation 2.2  (using eigenvalue)
+selected:          ma30_120
+sharpe:            0.29 annualised
+expected maximum:  0.19 annualised, if nothing works
+probabilistic:     0.820  (P[true sharpe > 0], ignoring the search)
+deflated:          0.622  (the same, after the search)
+```
+
+```bash
+holdout pbo sample/sweep.csv
+```
+
+```
+30 strategies, 16 blocks, 12,870 splits
+probability of backtest overfitting: 0.975
+probability of out-of-sample loss:   0.638
+degradation: oos = 0.0316 - 1.202 * is   (r^2 0.77)
+most often selected in-sample:
+  ma30_120              16.4%
+  ...
+```
+
+```bash
+holdout spa sample/trending.csv          # against zero; --benchmark COLUMN to compare
+holdout sharpe sample/trending.csv --column ma10_120
+```
+
+The same statistics on the trending sweep: deflated ratio 0.971, SPA p-value
+0.015, and Romano–Wolf names the rules that beat cash. Every command reads a
+CSV with one row per period and one column per strategy; see
+[`holdout/io.py`](src/holdout/io.py) for the layout.
+
+## Examples
+
+- [`examples/deflated_worked_example.py`](examples/deflated_worked_example.py)
+  — the Bailey and López de Prado (2014) example step by step, ending with the
+  track record the strategy would need after deflation (8.2 years).
+- [`examples/parameter_sweep.py`](examples/parameter_sweep.py) — every
+  statistic on both synthetic sweeps.
+- [`examples/purged_cv.py`](examples/purged_cv.py) — a nearest-neighbour
+  model with no skill scores a 0.20 forecast correlation under shuffled k-fold
+  and none under purged k-fold.
+
+The test suite runs all three and checks the numbers they print.
+
+## The design decision that mattered
+
+**Every statistic states the convention it needs, and refuses inputs that
+break it, instead of computing something plausible.** The formulas in this
+field are short and unforgiving: an annualised Sharpe ratio passed with a
+daily sample size, excess kurtosis where raw kurtosis belongs, or a
+multiple-testing method applied to one ratio without the rest of its family
+all produce a number of the right magnitude that is simply wrong. So:
+
+- Sharpe ratios are per period everywhere; annualisation happens at the edge.
+- (skewness, kurtosis) pairs that no distribution can have are rejected with a
+  message that names the likely mix-up.
+- `haircut_sharpe` refuses Holm and the FDR procedures, which need the whole
+  family, and points to the function that takes it.
+- The effective-trials estimator has no default, because the three estimators
+  disagree and the choice should be visible at the call site.
+
+The same principle drives the validation: every number in this README was
+measured, and where a published figure did not reproduce from its own printed
+inputs (the paper's DSR is computed from an unrounded benchmark) the test
+suite records why rather than bending the formula to match.
+
 ## Sharpe ratio inference
 
 ```python
@@ -264,3 +345,19 @@ What was measured:
 The third and fourth rows are Hansen's argument in numbers: the Reality Check
 is not wrong, but every poor strategy added to the set makes it harder for a
 good one to register.
+
+## Layout
+
+| Module | Contents |
+| --- | --- |
+| `series` | input validation for return series and matrices |
+| `moments` | skewness, raw kurtosis, autocorrelation |
+| `sharpe` | Sharpe ratio, Lo and Mertens standard errors, Lo's serial-correlation factor |
+| `deflated` | probabilistic and deflated Sharpe ratios, minimum track record, expected maximum |
+| `trials` | effective number of independent trials |
+| `multiple` | adjusted p-values, haircut Sharpe ratios, minimum t-statistic |
+| `pbo` | combinatorially symmetric cross-validation |
+| `splits` | walk-forward, purged k-fold, combinatorial purged CV, leakage audit |
+| `bootstrap` | stationary bootstrap and Politis–White block length |
+| `spa` | Reality Check, SPA, Romano–Wolf |
+| `io`, `synthetic`, `cli` | CSV input, the sample sweeps, the `holdout` command |

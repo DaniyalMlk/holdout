@@ -32,3 +32,27 @@ jobs:
         run: python -m mypy
       - name: Test
         run: python -m pytest
+
+  wheel:
+    name: Build and install wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Install into a clean environment and run every command
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/clean/bin/python -c "import holdout; print(holdout.__version__)"
+          /tmp/clean/bin/holdout sample-data --out /tmp/sample
+          /tmp/clean/bin/holdout sharpe /tmp/sample/sweep.csv --column ma10_120
+          /tmp/clean/bin/holdout deflate /tmp/sample/trending.csv
+          /tmp/clean/bin/holdout pbo /tmp/sample/sweep.csv
+          /tmp/clean/bin/holdout spa /tmp/sample/trending.csv --bootstrap 500

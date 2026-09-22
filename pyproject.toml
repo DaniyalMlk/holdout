@@ -43,6 +43,9 @@ dev = [
     "scipy>=1.10",
 ]
 
+[project.scripts]
+holdout = "holdout.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/DaniyalMlk/holdout"
 Issues = "https://github.com/DaniyalMlk/holdout/issues"
@@ -56,7 +59,7 @@ addopts = "-q"
 
 [tool.mypy]
 strict = true
-files = ["src/holdout", "tests"]
+files = ["src/holdout", "tests", "examples"]
 
 [[tool.mypy.overrides]]
 module = ["scipy.*"]
