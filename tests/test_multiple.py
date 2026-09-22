@@ -10,7 +10,14 @@ from numpy.typing import NDArray
 from scipy import stats
 
 from holdout import ValidationError
-from holdout.multiple import adjust_pvalues
+from holdout.multiple import (
+    adjust_pvalues,
+    haircut_sharpe,
+    haircut_sharpe_ratios,
+    minimum_sharpe,
+    minimum_t_statistic,
+    sharpe_pvalue,
+)
 
 METHODS = ["bonferroni", "sidak", "holm", "bh", "by"]
 
@@ -135,3 +142,108 @@ def test_bh_under_positive_dependence() -> None:
         rejected = adjust_pvalues(row, "bh") <= alpha
         fdps.append(float(np.sum(rejected[5:])) / max(float(np.sum(rejected)), 1.0))
     assert np.mean(fdps) <= alpha
+
+
+def test_sharpe_pvalue() -> None:
+    assert sharpe_pvalue(0.0, 100) == 1.0
+    sr, n = 0.1, 400
+    assert sharpe_pvalue(sr, n) == pytest.approx(2 * stats.norm.sf(sr * math.sqrt(n)))
+    assert sharpe_pvalue(-sr, n) == sharpe_pvalue(sr, n)
+    with pytest.raises(ValidationError):
+        sharpe_pvalue(0.1, 1)
+    with pytest.raises(ValidationError):
+        sharpe_pvalue(math.inf, 100)
+
+
+def test_one_test_means_no_haircut() -> None:
+    h = haircut_sharpe(0.1, 500, n_tests=1)
+    assert h.adjusted_sharpe == pytest.approx(0.1)
+    assert h.haircut == pytest.approx(0.0, abs=1e-12)
+
+
+def test_bonferroni_haircut_by_hand() -> None:
+    sr, n, m = 0.12, 1000, 50
+    t = sr * math.sqrt(n)
+    p = 2 * stats.norm.sf(t)
+    t_adj = stats.norm.isf(min(p * m, 1) / 2)
+    h = haircut_sharpe(sr, n, n_tests=m)
+    assert h.pvalue == pytest.approx(p)
+    assert h.adjusted_pvalue == pytest.approx(p * m)
+    assert h.adjusted_sharpe == pytest.approx(t_adj / math.sqrt(n))
+    assert 0 < h.haircut < 1
+
+
+def test_haircut_grows_with_the_number_of_tests_and_is_bounded() -> None:
+    cuts = [haircut_sharpe(0.1, 750, n_tests=m).haircut for m in (1, 10, 100, 1000)]
+    assert cuts == sorted(cuts)
+    weak = haircut_sharpe(0.03, 250, n_tests=100)
+    assert weak.adjusted_sharpe == 0.0
+    assert weak.haircut == 1.0
+    sidak = haircut_sharpe(0.1, 750, n_tests=100, method="sidak")
+    bonf = haircut_sharpe(0.1, 750, n_tests=100)
+    assert sidak.adjusted_sharpe >= bonf.adjusted_sharpe
+    assert haircut_sharpe(-0.1, 750, n_tests=10).adjusted_sharpe < 0
+
+
+def test_haircut_arguments() -> None:
+    with pytest.raises(ValidationError, match="whole family"):
+        haircut_sharpe(0.1, 500, n_tests=10, method="holm")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="n_tests"):
+        haircut_sharpe(0.1, 500, n_tests=0)
+    with pytest.raises(ValidationError, match="finite"):
+        haircut_sharpe_ratios([0.1, math.nan], 500, method="bh")
+    assert haircut_sharpe(0.0, 500, n_tests=3).haircut == 0.0
+
+
+def test_family_haircuts() -> None:
+    sharpes = [0.15, 0.1, 0.06, 0.02, -0.01]
+    for method in METHODS:
+        cuts = haircut_sharpe_ratios(sharpes, 500, method=method)  # type: ignore[arg-type]
+        assert [c.sharpe for c in cuts] == sharpes
+        for c in cuts:
+            assert abs(c.adjusted_sharpe) <= abs(c.sharpe) + 1e-15
+    single = haircut_sharpe(0.15, 500, n_tests=5)
+    family = haircut_sharpe_ratios(sharpes, 500, method="bonferroni")[0]
+    assert family.adjusted_sharpe == pytest.approx(single.adjusted_sharpe)
+    holm = haircut_sharpe_ratios(sharpes, 500, method="holm")
+    bonf = haircut_sharpe_ratios(sharpes, 500, method="bonferroni")
+    assert all(
+        h.adjusted_sharpe >= b.adjusted_sharpe - 1e-15 for h, b in zip(holm, bonf, strict=True)
+    )
+
+
+def test_minimum_t_statistic() -> None:
+    assert minimum_t_statistic(1) == pytest.approx(1.959964, abs=1e-6)
+    assert minimum_t_statistic(100) == pytest.approx(stats.norm.isf(0.05 / 200))
+    assert minimum_t_statistic(100, method="sidak") < minimum_t_statistic(100)
+    ts = [minimum_t_statistic(m) for m in (1, 10, 100, 1000)]
+    assert ts == sorted(ts)
+    with pytest.raises(ValidationError):
+        minimum_t_statistic(0)
+    with pytest.raises(ValidationError):
+        minimum_t_statistic(10, alpha=0.0)
+    with pytest.raises(ValidationError, match="method"):
+        minimum_t_statistic(10, method="bh")  # type: ignore[arg-type]
+
+
+def test_minimum_sharpe_round_trips_through_the_haircut() -> None:
+    n, m = 1260, 200
+    sr = minimum_sharpe(n, m)
+    h = haircut_sharpe(sr * (1 + 1e-9), n, n_tests=m)
+    assert h.adjusted_pvalue == pytest.approx(0.05, rel=1e-6)
+    assert minimum_sharpe(n, m, periods_per_year=252) == pytest.approx(sr * math.sqrt(252))
+    with pytest.raises(ValidationError):
+        minimum_sharpe(1, 10)
+    with pytest.raises(ValidationError):
+        minimum_sharpe(100, 10, periods_per_year=-1)
+
+
+def test_haircuts_are_not_proportional() -> None:
+    # Ten years of daily data, 100 tests: an annualised 1.0 loses 55% of its
+    # Sharpe ratio while 2.0 loses 12%. A flat "halve it" rule gets both wrong.
+    n = 2520
+    cut = {a: haircut_sharpe(a / math.sqrt(252), n, n_tests=100).haircut for a in (1.0, 1.5, 2.0)}
+    assert cut[1.0] == pytest.approx(0.55, abs=0.01)
+    assert cut[1.5] == pytest.approx(0.22, abs=0.01)
+    assert cut[2.0] == pytest.approx(0.12, abs=0.01)
+    assert minimum_sharpe(n, 100, periods_per_year=252) == pytest.approx(1.101, abs=1e-3)

@@ -13,6 +13,14 @@ from .deflated import (
 )
 from .exceptions import HoldoutError, InsufficientDataError, ValidationError
 from .moments import Moments, autocorrelation, kurtosis, moments, skewness
+from .multiple import (
+    Haircut,
+    adjust_pvalues,
+    haircut_sharpe,
+    haircut_sharpe_ratios,
+    minimum_sharpe,
+    minimum_t_statistic,
+)
 from .series import as_matrix, as_returns
 from .sharpe import (
     SharpeRatio,
@@ -28,12 +36,14 @@ __version__ = "0.1.0"
 
 __all__ = [
     "DeflatedSharpe",
+    "Haircut",
     "HoldoutError",
     "InsufficientDataError",
     "Moments",
     "SharpeRatio",
     "ValidationError",
     "__version__",
+    "adjust_pvalues",
     "as_matrix",
     "as_returns",
     "autocorrelation",
@@ -44,7 +54,11 @@ __all__ = [
     "estimate_sharpe",
     "expected_maximum_normal",
     "expected_maximum_sharpe",
+    "haircut_sharpe",
+    "haircut_sharpe_ratios",
     "kurtosis",
+    "minimum_sharpe",
+    "minimum_t_statistic",
     "minimum_track_record_length",
     "moments",
     "probabilistic_sharpe_ratio",
