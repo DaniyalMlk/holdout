@@ -31,18 +31,32 @@ from .sharpe import (
     sharpe_ratio,
     sharpe_standard_error,
 )
+from .splits import (
+    CombinatorialPurgedCV,
+    LeakageError,
+    Split,
+    combinatorial_purged_cv,
+    kfold,
+    leakage_audit,
+    number_of_paths,
+    purged_kfold,
+    walk_forward,
+)
 from .trials import effective_number_of_trials, trial_correlation
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "CombinatorialPurgedCV",
     "DeflatedSharpe",
     "Haircut",
     "HoldoutError",
     "InsufficientDataError",
+    "LeakageError",
     "Moments",
     "PBOResult",
     "SharpeRatio",
+    "Split",
     "ValidationError",
     "__version__",
     "adjust_pvalues",
@@ -50,6 +64,7 @@ __all__ = [
     "as_returns",
     "autocorrelation",
     "autocorrelation_adjusted_sharpe",
+    "combinatorial_purged_cv",
     "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
@@ -59,16 +74,21 @@ __all__ = [
     "expected_maximum_sharpe",
     "haircut_sharpe",
     "haircut_sharpe_ratios",
+    "kfold",
     "kurtosis",
+    "leakage_audit",
     "minimum_sharpe",
     "minimum_t_statistic",
     "minimum_track_record_length",
     "moments",
+    "number_of_paths",
     "probabilistic_sharpe_ratio",
     "probability_of_backtest_overfitting",
+    "purged_kfold",
     "serial_correlation_factor",
     "sharpe_ratio",
     "sharpe_standard_error",
     "skewness",
     "trial_correlation",
+    "walk_forward",
 ]

@@ -38,10 +38,10 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 5 — Cross-validation for overlapping labels
 
-- [ ] Walk-forward splits, expanding and rolling
-- [ ] Purged k-fold with an embargo on label intervals
-- [ ] Combinatorial purged cross-validation with backtest path assembly
-- [ ] Leakage audit that fails if any training label overlaps a test label
+- [x] Walk-forward splits, expanding and rolling
+- [x] Purged k-fold with an embargo on label intervals
+- [x] Combinatorial purged cross-validation with backtest path assembly
+- [x] Leakage audit that fails if any training label overlaps a test label
 
 ## Phase 6 — Bootstrap tests of superior predictive ability
 
