@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from hypothesis import given, settings
@@ -10,8 +12,10 @@ from holdout import InsufficientDataError, ValidationError
 from holdout.splits import (
     LeakageError,
     Split,
+    combinatorial_purged_cv,
     kfold,
     leakage_audit,
+    number_of_paths,
     purged_kfold,
     walk_forward,
 )
@@ -143,3 +147,80 @@ def test_walk_forward_arguments() -> None:
     ):
         with pytest.raises(ValidationError):
             walk_forward(10, **kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("groups", "k", "paths"), [(6, 2, 5), (10, 2, 9), (8, 3, 21), (5, 1, 1), (4, 3, 3)]
+)
+def test_number_of_paths_matches_the_closed_form(groups: int, k: int, paths: int) -> None:
+    assert number_of_paths(groups, k) == paths
+    assert number_of_paths(groups, k) == k * math.comb(groups, k) // groups
+    cv = combinatorial_purged_cv(groups, k, n=groups * 7)
+    assert len(cv.splits) == math.comb(groups, k)
+    assert cv.n_paths == paths
+
+
+def test_number_of_paths_arguments() -> None:
+    with pytest.raises(ValidationError):
+        number_of_paths(6, 0)
+    with pytest.raises(ValidationError):
+        number_of_paths(6, 6)
+
+
+def test_every_path_covers_each_observation_exactly_once() -> None:
+    n = 60
+    start, end = forward_labels(n, np.full(n, 2))
+    cv = combinatorial_purged_cv(6, 2, start=start, end=end, embargo=1)
+    leakage_audit(cv.splits, start, end)
+    assignment = cv.path_assignment()
+    assert len(assignment) == 5
+    for row in assignment:
+        assert all(index >= 0 for index in row)
+        for g, index in enumerate(row):
+            assert g in cv.splits[index].test_groups
+    # Each split contributes each of its test groups to exactly one path.
+    used = sorted((index, g) for row in assignment for g, index in enumerate(row))
+    expected = sorted((i, g) for i, s in enumerate(cv.splits) for g in s.test_groups)
+    assert used == expected
+
+
+def test_assembled_paths_put_each_prediction_in_its_place() -> None:
+    n = 48
+    cv = combinatorial_purged_cv(6, 2, n=n)
+    # Encode (split, position) in the prediction so placement can be checked.
+    predictions = [1000.0 * i + s.test for i, s in enumerate(cv.splits)]
+    paths = cv.assemble_paths(predictions)  # type: ignore[arg-type]
+    assert paths.shape == (5, n)
+    assert not np.any(np.isnan(paths))
+    np.testing.assert_array_equal(paths % 1000, np.tile(np.arange(n), (5, 1)))
+    for p, row in enumerate(cv.path_assignment()):
+        for g, index in enumerate(row):
+            assert np.all(paths[p, cv.groups[g]] // 1000 == index)
+
+
+def test_assemble_paths_arguments() -> None:
+    cv = combinatorial_purged_cv(4, 2, n=20)
+    with pytest.raises(ValidationError, match="prediction arrays"):
+        cv.assemble_paths([np.zeros(10)])
+    bad = [np.zeros(s.test.size) for s in cv.splits]
+    bad[2] = np.zeros(3)
+    with pytest.raises(ValidationError, match=r"predictions\[2\]"):
+        cv.assemble_paths(bad)  # type: ignore[arg-type]
+
+
+def test_cpcv_purges_around_every_test_group() -> None:
+    start, end = forward_labels(60, np.full(60, 4))
+    cv = combinatorial_purged_cv(6, 2, start=start, end=end, embargo=2)
+    split = next(s for s in cv.splits if s.test_groups == (1, 4))
+    # Groups are 10 wide, so the test groups are 10..19 and 40..49, and their
+    # label spans are [10, 23] and [40, 53]. A training label [s, s + 4]
+    # overlaps them for s in 6..23 and 36..53; the two-period embargoes (20-21,
+    # 50-51) fall inside those ranges already.
+    np.testing.assert_array_equal(split.train, np.r_[0:6, 24:36, 54:60])
+    leakage_audit(cv.splits, start, end)
+
+
+def test_embargo_extends_beyond_the_purge_when_labels_are_short() -> None:
+    cv = combinatorial_purged_cv(6, 2, n=60, embargo=3)
+    split = next(s for s in cv.splits if s.test_groups == (1, 4))
+    np.testing.assert_array_equal(split.train, np.r_[0:10, 23:40, 53:60])

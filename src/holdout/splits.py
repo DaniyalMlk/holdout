@@ -7,7 +7,7 @@ When two observations' label windows overlap, their labels share information,
 and ordinary k-fold puts one in training and the other in test all the time.
 The model is then scored on outcomes it has partly seen.
 
-The splitters here follow López de Prado (2018, chapter 7):
+The splitters here follow López de Prado (2018, chapters 7 and 12):
 
 * **Purging** drops every training observation whose label window overlaps
   the window spanned by a test group.
@@ -26,7 +26,9 @@ integer positions, or timestamps as floats.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from itertools import combinations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -35,10 +37,13 @@ from .exceptions import HoldoutError, InsufficientDataError, ValidationError
 from .series import FloatArray
 
 __all__ = [
+    "CombinatorialPurgedCV",
     "LeakageError",
     "Split",
+    "combinatorial_purged_cv",
     "kfold",
     "leakage_audit",
+    "number_of_paths",
     "purged_kfold",
     "walk_forward",
 ]
@@ -211,6 +216,99 @@ def walk_forward(
             splits.append(Split(train=train_idx, test=test_idx))
         offset += step
     return splits
+
+
+def number_of_paths(n_groups: int, n_test_groups: int) -> int:
+    """``k / N * C(N, k)``: backtest paths from combinatorial purged cross-validation."""
+    if not 0 < n_test_groups < n_groups:
+        raise ValidationError(
+            f"n_test_groups must be between 1 and n_groups - 1, got {n_test_groups} of {n_groups}"
+        )
+    return math.comb(n_groups - 1, n_test_groups - 1)
+
+
+@dataclass(frozen=True)
+class CombinatorialPurgedCV:
+    """All ``C(N, k)`` purged splits and the backtest paths they assemble into.
+
+    Each group is tested in ``C(N - 1, k - 1)`` splits. Path ``j`` takes each
+    group's ``j``-th appearance as a test group, so every path is a complete,
+    non-overlapping out-of-sample history of the whole sample.
+    """
+
+    splits: tuple[Split, ...]
+    groups: tuple[IndexArray, ...]
+    n_test_groups: int
+
+    @property
+    def n_paths(self) -> int:
+        return number_of_paths(len(self.groups), self.n_test_groups)
+
+    def path_assignment(self) -> list[list[int]]:
+        """``assignment[p][g]``: which split supplies group ``g`` on path ``p``."""
+        seen = [0] * len(self.groups)
+        assignment = [[-1] * len(self.groups) for _ in range(self.n_paths)]
+        for index, split in enumerate(self.splits):
+            for g in split.test_groups:
+                assignment[seen[g]][g] = index
+                seen[g] += 1
+        return assignment
+
+    def assemble_paths(self, predictions: list[ArrayLike]) -> FloatArray:
+        """Stitch per-split out-of-sample values into ``(n_paths, n)`` backtest paths.
+
+        ``predictions[i]`` holds one value per position in ``splits[i].test``,
+        in the same order — typically the strategy return the model produced
+        on that test observation.
+        """
+        if len(predictions) != len(self.splits):
+            raise ValidationError(
+                f"expected {len(self.splits)} prediction arrays, got {len(predictions)}"
+            )
+        values = []
+        for i, (split, p) in enumerate(zip(self.splits, predictions, strict=True)):
+            arr = np.asarray(p, dtype=np.float64).reshape(-1)
+            if arr.size != split.test.size:
+                raise ValidationError(
+                    f"predictions[{i}] has {arr.size} values for {split.test.size} test positions"
+                )
+            values.append(arr)
+        n = int(sum(g.size for g in self.groups))
+        paths = np.full((self.n_paths, n), np.nan)
+        for p, row in enumerate(self.path_assignment()):
+            for g, index in enumerate(row):
+                split = self.splits[index]
+                positions = self.groups[g]
+                lookup = np.searchsorted(split.test, positions)
+                paths[p, positions] = values[index][lookup]
+        return paths
+
+
+def combinatorial_purged_cv(
+    n_groups: int,
+    n_test_groups: int,
+    *,
+    n: int | None = None,
+    start: ArrayLike | None = None,
+    end: ArrayLike | None = None,
+    embargo: int = 0,
+) -> CombinatorialPurgedCV:
+    """Combinatorial purged cross-validation over ``n_groups`` contiguous groups."""
+    s, e = _labels(n, start, end)
+    size = s.size
+    embargo = _check_embargo(embargo, size)
+    groups = _groups(size, n_groups)
+    number_of_paths(n_groups, n_test_groups)
+    everything = np.arange(size, dtype=np.int64)
+    splits = []
+    for chosen in combinations(range(n_groups), n_test_groups):
+        test_groups = [groups[g] for g in chosen]
+        test = np.concatenate(test_groups)
+        train = _purge(np.setdiff1d(everything, test), test_groups, s, e, embargo)
+        splits.append(Split(train=train, test=test, test_groups=tuple(chosen)))
+    return CombinatorialPurgedCV(
+        splits=tuple(splits), groups=tuple(groups), n_test_groups=int(n_test_groups)
+    )
 
 
 def leakage_audit(
