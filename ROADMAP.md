@@ -24,10 +24,10 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 3 — Multiple testing
 
-- [ ] Bonferroni, Holm, Benjamini–Hochberg and Benjamini–Yekutieli adjusted p-values, checked against their definitions
-- [ ] Harvey–Liu haircut Sharpe ratio under each adjustment
-- [ ] Minimum t-statistic for a given number of trials and error rate
-- [ ] Family-wise error and false discovery rates checked by simulation
+- [x] Bonferroni, Šidák, Holm, Benjamini–Hochberg and Benjamini–Yekutieli adjusted p-values, checked against their definitions
+- [x] Harvey–Liu haircut Sharpe ratio under each adjustment
+- [x] Minimum t-statistic for a given number of trials and error rate
+- [x] Family-wise error and false discovery rates checked by simulation
 
 ## Phase 4 — Probability of backtest overfitting
 

@@ -120,3 +120,41 @@ independent strategies count as 6.0 (eigenvalue, Li and Ji 2005), 7.0
 (average correlation) or 2.5 (participation ratio). The eigenvalue method is
 exact for blocks of identical trials but jumps where an eigenvalue crosses an
 integer; the participation ratio is smooth but dominated by the largest block.
+
+## Multiple testing and haircut Sharpe ratios
+
+```python
+from holdout import adjust_pvalues, haircut_sharpe, haircut_sharpe_ratios, minimum_sharpe
+
+adjust_pvalues(pvalues, "holm")                     # also bonferroni, sidak, bh, by
+haircut_sharpe(0.063, 2520, n_tests=100)            # one ratio, single-step adjustment
+haircut_sharpe_ratios(sharpes, 2520, method="bh")   # a whole family, step-wise
+minimum_sharpe(2520, 100, periods_per_year=252)     # 1.10: the bar after 100 tests
+```
+
+Family-wise methods (Bonferroni, Šidák, Holm) bound the chance of *any* false
+discovery; the false-discovery-rate methods (Benjamini–Hochberg,
+Benjamini–Yekutieli) bound the expected *share* of discoveries that are false.
+Haircuts follow Harvey and Liu (2015): turn the Sharpe ratio into a
+t-statistic, adjust its p-value, and turn it back. A single ratio only admits
+the single-step adjustments, because Holm and the FDR procedures depend on the
+rest of the family; the library refuses rather than guessing the others.
+
+The haircut is not proportional, which is the useful thing to know about it.
+On ten years of daily data, the share of the Sharpe ratio removed is:
+
+| Annualised Sharpe ratio | 10 tests | 100 tests | 1000 tests |
+| --- | --- | --- | --- |
+| 0.75 | 43% | 100% | 100% |
+| 1.0 | 24% | 55% | 100% |
+| 1.5 | 10% | 22% | 35% |
+| 2.0 | 6% | 12% | 18% |
+
+What was measured:
+
+| Check | Result |
+| --- | --- |
+| Adjusted p-values vs each procedure as usually stated, arbitrary inputs, six levels | identical rejection sets |
+| Family-wise error, 20 independent nulls, 4000 runs, nominal 5% | Bonferroni 4.5%, Šidák 4.6%, Holm 4.5% |
+| False discovery rate, 40 nulls and 10 alternatives, nominal 10% | BH 7.8% (bound: 8%), BY 1.9% |
+| BH with equicorrelated (0.6) test statistics | at or below nominal |
