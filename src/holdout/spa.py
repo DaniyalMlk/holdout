@@ -1,7 +1,7 @@
 """Tests of superior predictive ability.
 
 The question: of ``K`` strategies, does *any* beat a benchmark once the fact
-that ``K`` were tried is accounted for? The input is a
+that ``K`` were tried is accounted for — and if so, which? The input is a
 ``(periods, K)`` matrix of **performance differentials**, strategy return
 minus benchmark return (or benchmark loss minus strategy loss), so that
 higher is better and the null hypothesis is ``max_k E[d_k] <= 0``.
@@ -18,6 +18,9 @@ higher is better and the null hypothesis is ``max_k E[d_k] <= 0``.
   *lower* (recentre at ``max(mean, 0)``), *consistent* (recentre only the
   strategies whose t-statistic is above ``-sqrt(2 log log n)``) and *upper*
   (recentre everything: the studentised Reality Check).
+* **Romano–Wolf** (2005) stepdown answers "which": it rejects the strategies
+  whose statistic beats the bootstrap maximum over the ones not yet rejected,
+  removes them, and repeats, controlling family-wise error throughout.
 
 Every test resamples rows with the stationary bootstrap, so all ``K``
 strategies are resampled together and their cross-correlation is kept.
@@ -29,16 +32,18 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 
 from .bootstrap import Seed, as_generator, optimal_block_length, stationary_bootstrap_indices
-from .exceptions import ValidationError
-from .series import FloatArray, as_matrix
+from .exceptions import InsufficientDataError, ValidationError
+from .series import FloatArray, as_matrix, check_probability
 
 __all__ = [
     "RealityCheck",
+    "RomanoWolf",
     "SPATest",
     "reality_check",
+    "romano_wolf",
     "superior_predictive_ability",
 ]
 
@@ -161,6 +166,65 @@ def superior_predictive_ability(
         consistent=pvalues["consistent"],
         upper=pvalues["upper"],
         best=int(np.argmax(t)),
+        block_length=r.block_length,
+        n_bootstrap=int(n_bootstrap),
+    )
+
+
+@dataclass(frozen=True)
+class RomanoWolf:
+    """Romano–Wolf stepdown: adjusted p-values and the strategies rejected at ``alpha``."""
+
+    statistics: FloatArray
+    adjusted_pvalues: FloatArray
+    alpha: float
+    block_length: float
+    n_bootstrap: int
+
+    @property
+    def rejected(self) -> NDArray[np.int64]:
+        """Indices of strategies found to beat the benchmark, strongest first."""
+        hits = np.flatnonzero(self.adjusted_pvalues <= self.alpha)
+        order = np.argsort(-self.statistics[hits], kind="stable")
+        result: NDArray[np.int64] = hits[order].astype(np.int64)
+        return result
+
+
+def romano_wolf(
+    differentials: ArrayLike,
+    *,
+    alpha: float = 0.05,
+    n_bootstrap: int = 1000,
+    block_length: float | None = None,
+    seed: Seed = None,
+) -> RomanoWolf:
+    """Romano–Wolf (2005) studentised stepdown for which strategies beat the benchmark.
+
+    Adjusted p-values follow the stepdown construction: sort the statistics
+    in decreasing order; the ``j``-th strategy's p-value is the bootstrap
+    probability that the maximum over it and every weaker strategy exceeds
+    its statistic, made monotone. Rejecting where the adjusted p-value is at
+    most ``alpha`` controls the family-wise error rate at ``alpha``.
+    """
+    check_probability(alpha, "alpha")
+    r = _resample(differentials, n_bootstrap, block_length, seed)
+    k = r.means.size
+    if k < 1:
+        raise InsufficientDataError("at least one strategy is needed")
+    root_n = math.sqrt(r.n)
+    t = root_n * r.means / r.omega
+    z = root_n * (r.boot_means - r.means) / r.omega
+    order = np.argsort(-t, kind="stable")
+    # Maximum over the j-th strongest and everything weaker: a reversed running max.
+    tail_max = np.maximum.accumulate(z[:, order][:, ::-1], axis=1)[:, ::-1]
+    raw = np.mean(tail_max >= t[order][None, :], axis=0)
+    adjusted_sorted = np.maximum.accumulate(raw)
+    adjusted = np.empty(k)
+    adjusted[order] = adjusted_sorted
+    return RomanoWolf(
+        statistics=t,
+        adjusted_pvalues=adjusted,
+        alpha=float(alpha),
         block_length=r.block_length,
         n_bootstrap=int(n_bootstrap),
     )
