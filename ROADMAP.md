@@ -45,11 +45,11 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 6 — Bootstrap tests of superior predictive ability
 
-- [ ] Stationary bootstrap with automatic block length selection
-- [ ] White's Reality Check
-- [ ] Hansen's test for superior predictive ability
-- [ ] Romano–Wolf stepdown to name which strategies beat the benchmark
-- [ ] Size and power checked by simulation
+- [x] Stationary bootstrap with automatic block length selection
+- [x] White's Reality Check
+- [x] Hansen's test for superior predictive ability
+- [x] Romano–Wolf stepdown to name which strategies beat the benchmark
+- [x] Size and power checked by simulation
 
 ## Phase 7 — Command line and examples
 
