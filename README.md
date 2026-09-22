@@ -158,3 +158,39 @@ What was measured:
 | Family-wise error, 20 independent nulls, 4000 runs, nominal 5% | Bonferroni 4.5%, Šidák 4.6%, Holm 4.5% |
 | False discovery rate, 40 nulls and 10 alternatives, nominal 10% | BH 7.8% (bound: 8%), BY 1.9% |
 | BH with equicorrelated (0.6) test statistics | at or below nominal |
+
+## Probability of backtest overfitting
+
+```python
+from holdout import probability_of_backtest_overfitting
+
+result = probability_of_backtest_overfitting(trials, n_blocks=16)   # (periods, variants)
+result.pbo                    # share of splits where the winner lands at or below the median
+result.logits                 # one per split: logit of the winner's out-of-sample rank
+result.degradation            # (slope, intercept, r^2) of out-of-sample on in-sample
+result.probability_of_loss    # share of splits where the winner loses money out of sample
+result.selection_frequency()  # how often each variant won in-sample
+```
+
+Combinatorially symmetric cross-validation (Bailey, Borwein, López de Prado and
+Zhu 2017) cuts the sample into `S` contiguous blocks and tries every one of the
+`C(S, S/2)` ways of using half of them to pick a winner and the other half to
+judge it. The deflated Sharpe ratio corrects one number for the size of the
+search; PBO asks of the search itself how often its choice fails to generalise.
+
+The paper's `S = 16` means 12,870 splits. For the Sharpe ratio and the mean
+each split is computed from per-block sums rather than by re-slicing the data:
+on a 2520 × 100 matrix that is 0.1 s against 11 s for the general path, which
+remains available for any metric passed as a callable. The sums are taken over
+centred returns, because the variance is a difference of sums and cancels
+badly otherwise — from raw sums, a series with mean 1 and spread 1e-4 loses its
+variance to a relative error of 8e-8.
+
+What was measured:
+
+| Check | Result |
+| --- | --- |
+| Fast path and general path vs a plain loop written from the paper | agree to 1e-10 (1e-12 for the large-mean case) |
+| Pure noise, 20 strategies, 30 runs | mean PBO 0.51 |
+| One strategy with a genuine edge among 20 | PBO below 0.01; selected in over 99% of splits |
+| Strategies demeaned over the full sample (the in-sample winner must lose) | PBO exactly 1 |

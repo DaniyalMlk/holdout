@@ -31,10 +31,10 @@ many splits of the data, and many strategies tested against one benchmark.
 
 ## Phase 4 — Probability of backtest overfitting
 
-- [ ] Combinatorially symmetric cross-validation over a performance matrix
-- [ ] Probability of backtest overfitting and the logit distribution behind it
-- [ ] Performance degradation and probability of loss out of sample
-- [ ] Validation: pure noise sits near one half, a genuine edge near zero
+- [x] Combinatorially symmetric cross-validation over a performance matrix
+- [x] Probability of backtest overfitting and the logit distribution behind it
+- [x] Performance degradation and probability of loss out of sample
+- [x] Validation: pure noise sits near one half, a genuine edge near zero
 
 ## Phase 5 — Cross-validation for overlapping labels
 
