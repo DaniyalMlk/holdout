@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -236,4 +237,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except HoldoutError as exc:
         print(f"holdout: {exc}", file=sys.stderr)
         return 2
+    except BrokenPipeError:
+        # Output piped into something that stopped reading, such as head.
+        # Point stdout at /dev/null so the interpreter's final flush is silent.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        return 1
     return code

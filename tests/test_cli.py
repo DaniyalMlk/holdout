@@ -92,3 +92,24 @@ def test_module_entry_point(sample: Path) -> None:
         [sys.executable, "-m", "holdout", "--version"], capture_output=True, text=True, check=True
     )
     assert version.stdout.startswith("holdout ")
+
+
+def test_a_closed_pipe_is_not_a_traceback(
+    sample: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Simulate "holdout sharpe ... | head -1": the reader has gone away.
+    sink = (tmp_path / "sink").open("w")
+
+    class ClosedPipe:
+        def write(self, _: str) -> int:
+            raise BrokenPipeError
+
+        def flush(self) -> None:
+            pass
+
+        def fileno(self) -> int:
+            return sink.fileno()
+
+    monkeypatch.setattr(sys, "stdout", ClosedPipe())
+    assert main(["sharpe", str(sample / "sweep.csv")]) == 1
+    sink.close()
