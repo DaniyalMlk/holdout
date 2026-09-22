@@ -194,3 +194,33 @@ What was measured:
 | Pure noise, 20 strategies, 30 runs | mean PBO 0.51 |
 | One strategy with a genuine edge among 20 | PBO below 0.01; selected in over 99% of splits |
 | Strategies demeaned over the full sample (the in-sample winner must lose) | PBO exactly 1 |
+
+## Cross-validation for overlapping labels
+
+```python
+from holdout import combinatorial_purged_cv, leakage_audit, purged_kfold, walk_forward
+
+# observation i is made at start[i]; its label (say a 5-day forward return) is known at end[i]
+splits = purged_kfold(5, start=start, end=end, embargo=10)
+leakage_audit(splits, start, end)          # raises LeakageError if any label overlaps
+
+cv = combinatorial_purged_cv(6, 2, start=start, end=end, embargo=10)
+cv.n_paths                                  # 5
+paths = cv.assemble_paths(per_split_oos_returns)   # (5, n): five full backtests
+```
+
+When a label spans several periods, two neighbouring observations share part
+of their outcome, and ordinary k-fold keeps putting one in training and the
+other in test. Purging drops every training observation whose label overlaps a
+test fold; the embargo also drops the observations just after each test fold
+(López de Prado 2018, chapter 7). Combinatorial purged cross-validation
+(chapter 12) tests every choice of `k` of `N` groups, so each group is tested
+`C(N-1, k-1)` times and the out-of-sample results stitch into that many
+complete backtest paths — a distribution of Sharpe ratios rather than one.
+
+`leakage_audit` checks every training label against every test label
+directly, so it does not trust the splitter it is checking. A property test
+runs purged k-fold over random label lengths, embargoes and fold counts and
+requires the audit to pass; plain k-fold on five-period labels is required to
+fail it. The CPCV tests check the path count against `k/N * C(N, k)` and that
+every path covers each observation exactly once.
