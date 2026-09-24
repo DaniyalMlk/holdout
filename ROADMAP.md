@@ -57,3 +57,12 @@ many splits of the data, and many strategies tested against one benchmark.
 - [x] `holdout` command with `sharpe`, `deflate`, `pbo`, `spa` and `sample-data`
 - [x] Worked examples runnable end to end
 - [x] Clean-wheel installation checked in continuous integration
+
+## Phase 8 — Installable from a package index
+
+- [x] Distribution name distinct from the taken one, import name unchanged
+- [x] SPDX licence expression, with the licence file inside both artefacts
+- [x] `--version` checked against the packaged metadata, not just printed
+- [x] Metadata tests: version agreement, typing marker, entry points, licence
+- [x] Tag-driven release with a version guard and no stored credential
+- [ ] First release on the index
