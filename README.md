@@ -17,6 +17,23 @@ See [ROADMAP.md](ROADMAP.md) for the build order.
 ## Install
 
 ```bash
+pip install holdout-backtest
+holdout sample-data --out sample
+holdout pbo sample/sweep.csv
+```
+
+**The distribution is `holdout-backtest`; the import is `holdout`.** `pip
+install holdout` fetches an unrelated project that was on the index first. The
+Python package keeps the short name because renaming it would have broken every
+existing import to settle a registry collision, so:
+
+```python
+import holdout  # installed from holdout-backtest
+```
+
+To work on the library instead:
+
+```bash
 pip install -e ".[dev]"
 python -m pytest
 ```
