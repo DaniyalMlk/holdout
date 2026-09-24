@@ -1,14 +1,24 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# 77 is the floor for the SPDX `license` expression and `license-files` below.
+# Anything older reads `license = "MIT"` as a legacy table and fails the build.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "holdout"
+# The distribution name is not the import name. `holdout` is taken on the index
+# by an unrelated project, so this publishes as `holdout-backtest` — the suffix
+# names what the library is for — while `import holdout` is unchanged. Renaming
+# the Python package to match would have broken every existing import for the
+# sake of a registry collision.
+name = "holdout-backtest"
 version = "0.1.0"
 description = "A backtest overfitting toolkit: deflated Sharpe ratios, backtest overfitting probability, purged cross-validation and multiple-testing haircuts"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+# The legacy `license = { text = "MIT" }` table this replaces put the word MIT in
+# the metadata and left the LICENSE file out of the distribution entirely.
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Daniyal" }]
 keywords = [
     "backtesting",
@@ -19,15 +29,18 @@ keywords = [
     "cross-validation",
     "quantitative-finance",
 ]
+# No `License ::` classifier: it is mutually exclusive with the SPDX expression
+# above, and supplying both is an error rather than a duplication.
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Typing :: Typed",
@@ -45,13 +58,20 @@ dev = [
 
 [project.scripts]
 holdout = "holdout.cli:main"
+# An alias under the distribution name, so that `uvx holdout-backtest pbo ...`
+# works. `uvx <name>` runs the console script whose name matches the
+# distribution; with only the short name the incantation becomes
+# `uvx --from holdout-backtest holdout`, which a reader cannot guess. Both names
+# reach the same entry point.
+holdout-backtest = "holdout.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/DaniyalMlk/holdout"
+Source = "https://github.com/DaniyalMlk/holdout"
 Issues = "https://github.com/DaniyalMlk/holdout/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/holdout"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -63,6 +83,14 @@ files = ["src/holdout", "tests", "examples"]
 
 [[tool.mypy.overrides]]
 module = ["scipy.*"]
+ignore_missing_imports = true
+
+# `tomllib` entered the standard library in 3.11, and mypy resolves imports
+# against the interpreter it is run under. CI runs it under 3.10 as well, where
+# the metadata tests' guarded `import tomllib` — behind a skipif on the same
+# version — is the only thing in the tree that mentions it.
+[[tool.mypy.overrides]]
+module = ["tomllib"]
 ignore_missing_imports = true
 
 [tool.ruff]
