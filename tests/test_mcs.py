@@ -327,9 +327,7 @@ def test_every_column_identical_is_refused_by_both() -> None:
     values = np.tile(generator.normal(size=(300, 1)), (1, 3))
     for statistic in BOTH:
         with pytest.raises(ValidationError, match="no standard error"):
-            model_confidence_set(
-                values, statistic=statistic, n_bootstrap=B, block_length=3, seed=9
-            )
+            model_confidence_set(values, statistic=statistic, n_bootstrap=B, block_length=3, seed=9)
 
 
 def test_one_model_is_refused() -> None:

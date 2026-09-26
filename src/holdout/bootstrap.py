@@ -182,6 +182,4 @@ def bootstrap_column_means(
     for lo in range(0, replications, chunk):
         hi = min(lo + chunk, replications)
         resampled[lo:hi] = values[indices[lo:hi]].mean(axis=1)
-    return ColumnMeans(
-        means=values.mean(axis=0), resampled=resampled, n=n, block_length=block
-    )
+    return ColumnMeans(means=values.mean(axis=0), resampled=resampled, n=n, block_length=block)

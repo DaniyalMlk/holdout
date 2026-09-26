@@ -131,9 +131,7 @@ class ModelConfidenceSet:
     def excluded(self) -> NDArray[np.int64]:
         """Indices not in the set, in the order they were eliminated."""
         dropped = [
-            step.model
-            for step in self.eliminations
-            if self.pvalues[step.model] <= self.alpha
+            step.model for step in self.eliminations if self.pvalues[step.model] <= self.alpha
         ]
         return np.asarray(dropped, dtype=np.int64)
 
