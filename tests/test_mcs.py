@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from holdout import ValidationError
 from holdout.mcs import Statistic, model_confidence_set
@@ -22,11 +23,11 @@ T, K, B = 500, 8, 300
 BOTH = [Statistic.MAX, Statistic.RANGE]
 
 
-def equally_good(generator: np.random.Generator, models: int = K) -> np.ndarray:
+def equally_good(generator: np.random.Generator, models: int = K) -> NDArray[np.float64]:
     return generator.normal(size=(T, models))
 
 
-def one_clear_winner(generator: np.random.Generator) -> np.ndarray:
+def one_clear_winner(generator: np.random.Generator) -> NDArray[np.float64]:
     """One model a long way ahead, and a pair of near-copies of it.
 
     The near-copies are the interesting part. They are not independent tries, and
