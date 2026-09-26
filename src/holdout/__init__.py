@@ -18,6 +18,7 @@ from .deflated import (
     probabilistic_sharpe_ratio,
 )
 from .exceptions import HoldoutError, InsufficientDataError, ValidationError
+from .mcs import Elimination, ModelConfidenceSet, Statistic, model_confidence_set
 from .moments import Moments, autocorrelation, kurtosis, moments, skewness
 from .multiple import (
     Haircut,
@@ -64,10 +65,12 @@ __all__ = [
     "ColumnMeans",
     "CombinatorialPurgedCV",
     "DeflatedSharpe",
+    "Elimination",
     "Haircut",
     "HoldoutError",
     "InsufficientDataError",
     "LeakageError",
+    "ModelConfidenceSet",
     "Moments",
     "PBOResult",
     "RealityCheck",
@@ -75,14 +78,15 @@ __all__ = [
     "SPATest",
     "SharpeRatio",
     "Split",
+    "Statistic",
     "ValidationError",
     "__version__",
     "adjust_pvalues",
     "as_matrix",
     "as_returns",
     "autocorrelation",
-    "bootstrap_column_means",
     "autocorrelation_adjusted_sharpe",
+    "bootstrap_column_means",
     "combinatorial_purged_cv",
     "cscv_partitions",
     "deflate_trials",
@@ -99,6 +103,7 @@ __all__ = [
     "minimum_sharpe",
     "minimum_t_statistic",
     "minimum_track_record_length",
+    "model_confidence_set",
     "moments",
     "number_of_paths",
     "optimal_block_length",
