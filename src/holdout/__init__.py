@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from .bootstrap import optimal_block_length, stationary_bootstrap_indices
+from .bootstrap import (
+    ColumnMeans,
+    bootstrap_column_means,
+    optimal_block_length,
+    stationary_bootstrap_indices,
+)
 from .deflated import (
     DeflatedSharpe,
     deflate_trials,
@@ -56,6 +61,7 @@ from .trials import effective_number_of_trials, trial_correlation
 __version__ = "0.1.0"
 
 __all__ = [
+    "ColumnMeans",
     "CombinatorialPurgedCV",
     "DeflatedSharpe",
     "Haircut",
@@ -75,6 +81,7 @@ __all__ = [
     "as_matrix",
     "as_returns",
     "autocorrelation",
+    "bootstrap_column_means",
     "autocorrelation_adjusted_sharpe",
     "combinatorial_purged_cv",
     "cscv_partitions",
