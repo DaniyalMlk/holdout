@@ -69,6 +69,88 @@ def test_spa_against_zero_and_a_column(sample: Path, capsys: pytest.CaptureFixtu
     assert "29 strategies against ma5_40" in out
 
 
+def test_mcs_on_pure_noise_keeps_every_model(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Thirty crossover rules over ten years of a driftless series.
+
+    Nothing distinguishes them because nothing about them is different, and the
+    output says so in the one sentence a reader needs rather than leaving them to
+    infer it from thirty p-values near one.
+    """
+    out = run(capsys, "mcs", str(sample / "sweep.csv"), "--bootstrap", "300")
+    assert "30 models, 2520 periods" in out
+    assert "max statistic" in out
+    assert "All 30 models are in the set" in out
+    assert "claim the data does not support" in out
+    assert out.count(" in") >= 30
+
+
+def test_mcs_on_a_trending_series_still_keeps_nearly_everything(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The measurement worth having, because it is the uncomfortable one.
+
+    The trending sweep has a genuine signal in it — `deflate` finds the best rule
+    significant — and ten years of daily data still cannot separate 29 of the 30
+    parameter choices at the 10% level. The best annualised mean is 10.8% and the
+    worst survivor's is 1.5%, which is the range the data declines to rule out.
+    """
+    out = run(capsys, "mcs", str(sample / "trending.csv"), "--bootstrap", "300")
+    assert "30 models, 2520 periods" in out
+    lines = [line for line in out.splitlines() if line.endswith((" in", " out"))]
+    assert len(lines) == 30
+    inside = sum(line.endswith(" in") for line in lines)
+    assert inside >= 25
+    assert "survive at 0.1" in out or "All 30" in out
+
+
+def test_mcs_reports_the_rows_in_order_of_mean_performance(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "mcs", str(sample / "trending.csv"), "--bootstrap", "300")
+    means = [
+        float(line.split()[1].rstrip("%"))
+        for line in out.splitlines()
+        if line.endswith((" in", " out"))
+    ]
+    assert means == sorted(means, reverse=True)
+
+
+def test_mcs_at_a_larger_level_gives_a_smaller_set(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Which is backwards from a hypothesis test and is the thing to remember."""
+    sizes = []
+    for alpha in ("0.05", "0.5"):
+        out = run(
+            capsys,
+            "mcs",
+            str(sample / "trending.csv"),
+            "--bootstrap",
+            "300",
+            "--alpha",
+            alpha,
+        )
+        sizes.append(sum(line.endswith(" in") for line in out.splitlines()))
+    assert sizes[0] > sizes[1]
+
+
+def test_mcs_takes_the_range_statistic_too(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "mcs",
+        str(sample / "trending.csv"),
+        "--statistic",
+        "range",
+        "--bootstrap",
+        "300",
+    )
+    assert "range statistic" in out
+
+
 def test_errors_are_reported_without_a_traceback(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
