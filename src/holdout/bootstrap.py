@@ -22,14 +22,21 @@ the estimator against.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from .exceptions import InsufficientDataError, ValidationError
-from .series import as_returns
+from .series import FloatArray, as_matrix, as_returns
 
-__all__ = ["as_generator", "optimal_block_length", "stationary_bootstrap_indices"]
+__all__ = [
+    "ColumnMeans",
+    "as_generator",
+    "bootstrap_column_means",
+    "optimal_block_length",
+    "stationary_bootstrap_indices",
+]
 
 Seed = int | np.random.Generator | None
 
@@ -115,3 +122,64 @@ def optimal_block_length(returns: ArrayLike) -> float:
         return float(cap)
     b = (2.0 * big_g**2 / (2.0 * small_g**2)) ** (1.0 / 3.0) * n ** (1.0 / 3.0)
     return float(min(max(b, 1.0), cap))
+
+
+@dataclass(frozen=True)
+class ColumnMeans:
+    """Column means of a matrix, and of each stationary-bootstrap resample of it."""
+
+    #: ``(k,)`` sample means, one per column.
+    means: FloatArray
+    #: ``(n_bootstrap, k)`` means of the resamples. Every row of this used the
+    #: *same* resampled time indices across all ``k`` columns, which is the
+    #: whole reason this is one function rather than ``k`` calls.
+    resampled: FloatArray
+    #: Rows in the original matrix.
+    n: int
+    #: The block length used, estimated if it was not given.
+    block_length: float
+
+
+def bootstrap_column_means(
+    matrix: ArrayLike,
+    *,
+    n_bootstrap: int = 1000,
+    block_length: float | None = None,
+    seed: Seed = None,
+    name: str = "matrix",
+    min_rows: int = 16,
+) -> ColumnMeans:
+    """Resample the rows of a matrix and take the column means of each resample.
+
+    Everything any test in this library asks of the bootstrap is a function of
+    these means. A pairwise difference of two columns has the mean
+    ``mean_i - mean_j`` in every resample, so a test over all ``k(k-1)/2`` pairs
+    needs this ``(B, k)`` array and not a ``(B, k, k)`` one — which is the
+    difference between megabytes and gigabytes once ``k`` is in the dozens.
+
+    One block length is used for every column, estimated as the average of the
+    per-column estimates when it is not supplied. Resampling the columns on
+    different indices would break the cross-sectional dependence, and that
+    dependence is the reason a set of near-identical strategies is not twenty
+    independent tries.
+
+    Memory is bounded by resampling in chunks rather than materialising the full
+    ``(B, n, k)`` gather, which at a thousand replications of a thousand rows and
+    fifty columns would be 400 MB for a result that is 400 KB.
+    """
+    values = as_matrix(matrix, name=name, min_rows=min_rows)
+    n, k = values.shape
+    if int(n_bootstrap) != n_bootstrap or n_bootstrap < 100:
+        raise ValidationError(f"n_bootstrap must be an integer of at least 100, got {n_bootstrap}")
+    if block_length is None:
+        block = float(np.mean([optimal_block_length(values[:, j]) for j in range(k)]))
+    else:
+        block = float(block_length)
+    replications = int(n_bootstrap)
+    indices = stationary_bootstrap_indices(n, block, replications, seed=as_generator(seed))
+    resampled = np.empty((replications, k))
+    chunk = max(1, int(4_000_000 // max(n * k, 1)))
+    for lo in range(0, replications, chunk):
+        hi = min(lo + chunk, replications)
+        resampled[lo:hi] = values[indices[lo:hi]].mean(axis=1)
+    return ColumnMeans(means=values.mean(axis=0), resampled=resampled, n=n, block_length=block)

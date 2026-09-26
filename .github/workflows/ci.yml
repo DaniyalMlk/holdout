@@ -62,6 +62,8 @@ jobs:
           /tmp/clean/bin/holdout deflate /tmp/sample/trending.csv
           /tmp/clean/bin/holdout pbo /tmp/sample/sweep.csv
           /tmp/clean/bin/holdout spa /tmp/sample/trending.csv --bootstrap 500
+          /tmp/clean/bin/holdout mcs /tmp/sample/trending.csv --bootstrap 500
+          /tmp/clean/bin/holdout mcs /tmp/sample/sweep.csv --statistic range --bootstrap 500
       # These assertions read License-Expression, License-File and the
       # classifiers out of dist-info. In the test job that dist-info belongs to
       # an editable install, written once and able to agree with a

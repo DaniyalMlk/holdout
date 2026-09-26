@@ -34,9 +34,9 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from .bootstrap import Seed, as_generator, optimal_block_length, stationary_bootstrap_indices
+from .bootstrap import Seed, bootstrap_column_means
 from .exceptions import InsufficientDataError, ValidationError
-from .series import FloatArray, as_matrix, check_probability
+from .series import FloatArray, check_probability
 
 __all__ = [
     "RealityCheck",
@@ -63,29 +63,24 @@ def _resample(
     block_length: float | None,
     seed: Seed,
 ) -> _Resampled:
-    d = as_matrix(differentials, name="differentials", min_rows=16)
-    n, k = d.shape
-    if int(n_bootstrap) != n_bootstrap or n_bootstrap < 100:
-        raise ValidationError(f"n_bootstrap must be an integer of at least 100, got {n_bootstrap}")
-    if block_length is None:
-        # One length for all columns, so they are resampled with the same rows.
-        block = float(np.mean([optimal_block_length(d[:, j]) for j in range(k)]))
-    else:
-        block = float(block_length)
-    rng = as_generator(seed)
-    indices = stationary_bootstrap_indices(n, block, int(n_bootstrap), seed=rng)
-    means = d.mean(axis=0)
-    boot = np.empty((int(n_bootstrap), k))
-    # Resample in chunks to bound memory at roughly 32 MB.
-    chunk = max(1, int(4_000_000 // max(n * k, 1)))
-    for lo in range(0, int(n_bootstrap), chunk):
-        hi = min(lo + chunk, int(n_bootstrap))
-        boot[lo:hi] = d[indices[lo:hi]].mean(axis=1)
-    omega = np.sqrt(n) * boot.std(axis=0, ddof=1)
+    sampled = bootstrap_column_means(
+        differentials,
+        n_bootstrap=n_bootstrap,
+        block_length=block_length,
+        seed=seed,
+        name="differentials",
+    )
+    omega = np.sqrt(sampled.n) * sampled.resampled.std(axis=0, ddof=1)
     flat = np.flatnonzero(omega <= 0.0)
     if flat.size:
         raise ValidationError(f"differential column {int(flat[0])} has no bootstrap variation")
-    return _Resampled(means=means, boot_means=boot, omega=omega, n=n, block_length=block)
+    return _Resampled(
+        means=sampled.means,
+        boot_means=sampled.resampled,
+        omega=omega,
+        n=sampled.n,
+        block_length=sampled.block_length,
+    )
 
 
 @dataclass(frozen=True)

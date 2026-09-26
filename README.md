@@ -87,6 +87,7 @@ most often selected in-sample:
 
 ```bash
 holdout spa sample/trending.csv          # against zero; --benchmark COLUMN to compare
+holdout mcs sample/trending.csv          # no benchmark needed; --statistic range
 holdout sharpe sample/trending.csv --column ma10_120
 ```
 
@@ -102,11 +103,14 @@ CSV with one row per period and one column per strategy; see
   track record the strategy would need after deflation (8.2 years).
 - [`examples/parameter_sweep.py`](examples/parameter_sweep.py) — every
   statistic on both synthetic sweeps.
+- [`examples/model_confidence_set.py`](examples/model_confidence_set.py) — both
+  sweeps through the confidence set; the one with a real drift still keeps 29 of
+  its 30 rules.
 - [`examples/purged_cv.py`](examples/purged_cv.py) — a nearest-neighbour
   model with no skill scores a 0.20 forecast correlation under shuffled k-fold
   and none under purged k-fold.
 
-The test suite runs all three and checks the numbers they print.
+The test suite runs all four and checks the numbers they print.
 
 ## The design decision that mattered
 
@@ -371,6 +375,70 @@ The third and fourth rows are Hansen's argument in numbers: the Reality Check
 is not wrong, but every poor strategy added to the set makes it harder for a
 good one to register.
 
+## The model confidence set, when there is no benchmark
+
+```python
+from holdout import Statistic, model_confidence_set
+
+# performance: (periods, models), higher better — returns, or losses negated
+result = model_confidence_set(returns, alpha=0.10, seed=0)
+result.included            # indices in the set, best average first
+result.pvalues             # one per model; in the set when above alpha
+result.at(0.25)            # any other level, without rerunning the bootstrap
+model_confidence_set(returns, statistic=Statistic.RANGE, seed=0)
+```
+
+Everything above needs a benchmark. This does not, which is why it answers the
+question people actually arrive with: of twenty candidates with no incumbent
+among them, which can be told apart from the best?
+
+Nominating the sample-best as the benchmark and testing the rest against it is
+not a repair. The benchmark is then chosen by the same data the test runs on, so
+under the null it is systematically the luckiest series present and every
+comparison is biased towards finding nothing. Hansen, Lunde and Nason (2011)
+turn it around: test whether all the models are equally good, drop the one the
+test most implicates if it is rejected, and repeat until it is not.
+
+**The size of the set is the result.** A set holding 29 of 30 models is not the
+procedure failing; it is the procedure saying that ten years of daily data cannot
+separate 29 parameter choices. `examples/model_confidence_set.py` is exactly
+that case, and it is the uncomfortable one:
+
+| Sweep | deflated Sharpe | set at 10% (max) | set at 10% (range) |
+| --- | --- | --- | --- |
+| no drift in the market | 0.622 | 30 of 30 | 30 of 30 |
+| a genuine slow drift | 0.971 | **29 of 30** | 30 of 30 |
+
+The second row has a real signal in it — the best rule clears the search that
+produced it — and the surviving set still spans 9.3% of annualised mean return.
+"This rule made money" and "this rule is the one that made money" are different
+claims, and a parameter sweep is usually read as making the second.
+
+A smaller `alpha` gives a **larger** set. It is a confidence region, so the usual
+asymmetry of hypothesis testing runs backwards, and the default of 0.10 follows
+the paper rather than the 0.05 habit. One bootstrap produces every level, since
+the p-values do not depend on it — only the reading of them does.
+
+**Both statistics are here because neither dominates.** `MAX` studentises each
+model against the average of the set; `RANGE` takes the largest studentised
+difference over all pairs. Over fifteen borderline samples of ten models they
+retained 8.13 and 7.07 models on average, the range set smaller on fourteen of
+the fifteen and larger on one — a tendency and not a guarantee. `MAX` is the
+default because a larger set is the weaker claim.
+
+They also differ on degeneracy, and the difference is real rather than an
+oversight. Two duplicated columns have no standard error between them, so `RANGE`
+refuses; `MAX` never forms that pairwise error and carries on, giving both copies
+the same p-value. What it cannot then do is tell the caller that three of its ten
+"models" are one strategy implemented three times.
+
+The zero it checks for is **relative, not absolute**. Two identical columns have
+means that differ in the last bits of the mantissa rather than not at all, so
+their bootstrap deviations come out near 1e-17 and a `scale > 0` test passes
+them — after which the studentised difference is of order 1e16 and a model is
+eliminated on a p-value of zero, as though the evidence against it were
+overwhelming rather than absent.
+
 ## Layout
 
 | Module | Contents |
@@ -385,4 +453,5 @@ good one to register.
 | `splits` | walk-forward, purged k-fold, combinatorial purged CV, leakage audit |
 | `bootstrap` | stationary bootstrap and Politis–White block length |
 | `spa` | Reality Check, SPA, Romano–Wolf |
+| `mcs` | model confidence set, both statistics |
 | `io`, `synthetic`, `cli` | CSV input, the sample sweeps, the `holdout` command |

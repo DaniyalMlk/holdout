@@ -20,6 +20,7 @@ from . import __version__
 from .deflated import deflate_trials, minimum_track_record_length, probabilistic_sharpe_ratio
 from .exceptions import HoldoutError
 from .io import ReturnTable, read_returns_csv, write_returns_csv
+from .mcs import Statistic, model_confidence_set
 from .pbo import probability_of_backtest_overfitting
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
@@ -172,6 +173,55 @@ def _cmd_spa(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mcs(args: argparse.Namespace) -> int:
+    table = _load(args)
+    result = model_confidence_set(
+        table.values,
+        alpha=args.alpha,
+        statistic=args.statistic,
+        n_bootstrap=args.bootstrap,
+        seed=args.seed,
+        names=list(table.names),
+    )
+    print(f"{len(table.names)} models, {table.values.shape[0]} periods")
+    print(
+        f"{args.statistic} statistic, block length {result.block_length:.1f}, "
+        f"{args.bootstrap} bootstrap samples, seed {args.seed}"
+    )
+    included = set(result.included.tolist())
+    rows = [
+        [
+            table.names[j],
+            f"{result.performance[j] * args.periods_per_year:.2%}",
+            f"{result.pvalues[j]:.3f}",
+            "in" if j in included else "out",
+        ]
+        for j in np.argsort(-result.performance)
+    ]
+    print()
+    print(_table(rows, ["model", "mean (annualised)", "p-value", f"set at {args.alpha:g}"]))
+    print()
+    kept = len(included)
+    if kept == len(table.names):
+        print(
+            f"All {kept} models are in the set. {table.values.shape[0]} periods cannot "
+            "separate them, so picking the highest mean and calling it the best is a "
+            "claim the data does not support."
+        )
+    elif kept == 1:
+        print(
+            f"One model survives: {result.included_names[0]}. Worth ruling out the dull "
+            "explanations before believing it — a model on a different scale from the "
+            "rest, or one that is an affine transform of another, both produce this."
+        )
+    else:
+        print(
+            f"{kept} of {len(table.names)} models survive at {args.alpha:g}. The set is a "
+            "confidence region: its size is the result, not a shortcoming of it."
+        )
+    return 0
+
+
 def _cmd_sample_data(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -221,6 +271,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--alpha", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(func=_cmd_spa)
+
+    p = sub.add_parser(
+        "mcs",
+        help="the set of models that cannot be told apart from the best",
+        description=(
+            "Needs no benchmark, which is the difference from 'spa'. Columns are "
+            "performance with higher better; a loss matrix must be negated first, "
+            "or the set returned is the one around the worst model."
+        ),
+    )
+    with_file(p)
+    p.add_argument(
+        "--statistic",
+        choices=[Statistic.MAX.value, Statistic.RANGE.value],
+        default=Statistic.MAX.value,
+        help="max compares each model to the set average, range takes the largest "
+        "studentised pair (default: max)",
+    )
+    p.add_argument("--bootstrap", type=int, default=1000)
+    p.add_argument(
+        "--alpha",
+        type=float,
+        default=0.10,
+        help="a smaller level gives a LARGER set, since this is a confidence "
+        "region (default: 0.10, following the paper)",
+    )
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=_cmd_mcs)
 
     p = sub.add_parser("sample-data", help="write synthetic parameter sweeps")
     p.add_argument("--out", default="sample")
