@@ -66,3 +66,47 @@ many splits of the data, and many strategies tested against one benchmark.
 - [x] Metadata tests: version agreement, typing marker, entry points, licence
 - [x] Tag-driven release with a version guard and no stored credential
 - [ ] First release on the index
+
+## Phase 9 — A confidence set, with no benchmark to nominate
+
+Every test in phase 6 needs a benchmark, so none of them answers the question a
+parameter sweep actually raises: of thirty candidates with no incumbent among
+them, which can be told apart from the best? Nominating the sample-best as the
+benchmark is not a repair — it is chosen by the data the test runs on, so under
+the null it is the luckiest series present.
+
+- [x] The equivalence test, the elimination rule, and the sequence repeated
+      until it stops rejecting
+- [x] Both statistics from Hansen, Lunde and Nason (2011), since neither
+      dominates the other
+- [x] A p-value per model, monotone in the elimination order, so every level is
+      readable from one bootstrap
+- [x] The stationary bootstrap already here, resampling every model on the same
+      rows
+- [x] Coverage of the true best model checked by simulation
+- [x] Degenerate columns refused against a relative threshold, not an absolute one
+- [x] An `mcs` command, and a worked example over both sweeps
+
+Measured. On the driftless sweep all thirty rules survive under both statistics.
+On the sweep with a genuine drift — deflated Sharpe ratio 0.971, so the best rule
+clears the search that produced it — 29 of 30 rules are still in the 10% set, and
+the surviving set spans 9.3% of annualised mean return.
+
+Coverage: over 120 replications with five models 0.04 apart in true mean, the
+true best model was in the 10% set 120 times out of 120 under both statistics.
+Over-coverage is expected and is not a defect — the bound is asymptotic and
+one-sided, and the sequence stops at the first failure to reject rather than
+testing every subset.
+
+The two statistics retained 8.13 and 7.07 models on average over fifteen
+borderline samples, the range one smaller on fourteen of fifteen and larger on
+one. So the ordering is a tendency. The default is the max statistic, because a
+larger set is the weaker claim.
+
+The degeneracy check is the part that would have been wrong the obvious way. Two
+identical columns have means differing in the last bits of the mantissa rather
+than not at all, so their bootstrap deviations are around 1e-17 and `scale > 0`
+passes them — after which the studentised difference is of order 1e16 and the
+model is eliminated on a p-value of zero, which reads as overwhelming evidence
+rather than none. The threshold is relative to the largest standard error in the
+same set.
