@@ -24,6 +24,7 @@ import math
 import statistics
 
 import numpy as np
+from numpy.typing import NDArray
 
 from holdout import sharpe_difference
 
@@ -36,7 +37,7 @@ CRITICAL = 1.959963984540054
 NOMINAL = 0.05
 
 
-def paired(persistence: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
+def paired(persistence: float, seed: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Two correlated series with the same true Sharpe ratio."""
     rng = np.random.default_rng(seed)
     first = rng.normal(0.0, 1.0, PERIODS)

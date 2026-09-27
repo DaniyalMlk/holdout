@@ -29,6 +29,7 @@ import statistics
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from holdout.exceptions import InsufficientDataError, ValidationError
 from holdout.pairwise import (
@@ -53,7 +54,7 @@ def paired(
     second_mean: float = 0.0005,
     volatility: float = 0.01,
     seed: int = 1,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Two correlated series, optionally serially dependent, with equal Sharpe ratios.
 
     The innovations are rescaled so an AR(1) series keeps the unconditional
