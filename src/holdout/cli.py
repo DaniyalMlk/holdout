@@ -277,7 +277,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         f"\nThe robust standard error is {result.error_ratio:.2f} times the closed-form "
         f"one, {direction}. The closed form assumes independent normal returns; measured "
         "on serially dependent series with a true null it rejects about a third of the "
-        "time at a persistence of 0.6, against the robust version's one in nine — better "
+        "time at a persistence of 0.6, against the robust version's one in ten — better "
         "and still not 5%."
     )
     return 0

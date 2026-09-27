@@ -304,7 +304,7 @@ def test_serial_dependence_breaks_the_closed_form_and_only_bends_the_robust_one(
     At a persistence of 0.6 the closed form rejects a true null about a third of
     the time against a nominal 5%, because it assumes independence and the
     difference of two persistent series has far more sampling variability than its
-    formula allows for. The robust variance cuts that to about one in nine — much
+    formula allows for. The robust variance cuts that to one in ten — much
     better and not right, because a truncated Bartlett kernel recovers only part of
     the long-run variance. Both halves of that go in the documentation.
     """

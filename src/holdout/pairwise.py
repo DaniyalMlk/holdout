@@ -40,8 +40,9 @@ returned rather than one being chosen. What measuring them showed is in
 ``examples/sharpe_difference.py`` and it is not quite the story the literature
 implies: on independent normal data the two agree closely and both hold their
 size, and the gap only opens where the returns are serially dependent — where the
-closed form rejects a true null far more often than it should and the robust one
-is closer without being right.
+closed form rejects a true null six times too often at a persistence of 0.6 — 35%
+against a nominal 5% — and the robust one gets it to 10%, which is closer without
+being right.
 
 Sign and scale conventions. The difference is ``first - second``, so a positive
 one favours the first series. Both estimators are invariant to rescaling either

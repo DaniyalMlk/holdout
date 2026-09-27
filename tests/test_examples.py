@@ -63,3 +63,28 @@ def test_the_model_confidence_set_example_keeps_nearly_everything(
     assert trend["best"] != noise["best"]
     output = capsys.readouterr().out
     assert "29 of 30 rules are still in the confidence set" in output
+
+
+def test_the_sharpe_difference_example_measures_both_tests_size(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The size measurement, which is the whole case for two variances.
+
+    With independent returns both tests hold their size — 4.2% and 4.7% against a
+    nominal 5% — and the two standard errors agree to within one per cent, so the
+    robust version costs nothing where it is not needed. Serial dependence is where
+    they part: at a persistence of 0.6 the closed form rejects a true null 34.7% of
+    the time and the robust version 10.0%. Both halves of that are asserted,
+    including that the robust one is still wrong.
+    """
+    result = run_example("sharpe_difference.py")
+    clean = result["none"]
+    strong = result["AR(1), rho = 0.6"]
+    assert clean["closed"] == pytest.approx(0.042, abs=0.01)
+    assert clean["robust"] == pytest.approx(0.047, abs=0.01)
+    assert clean["ratio"] == pytest.approx(0.99, abs=0.02)
+    assert strong["closed"] == pytest.approx(0.347, abs=0.03)
+    assert strong["robust"] == pytest.approx(0.100, abs=0.02)
+    assert strong["robust"] > 0.05
+    assert strong["ratio"] == pytest.approx(1.65, abs=0.05)
+    assert "All figures reproduced" in capsys.readouterr().out
