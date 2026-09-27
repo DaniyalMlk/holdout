@@ -195,3 +195,53 @@ def test_a_closed_pipe_is_not_a_traceback(
     monkeypatch.setattr(sys, "stdout", ClosedPipe())
     assert main(["sharpe", str(sample / "sweep.csv")]) == 1
     sink.close()
+
+
+def test_compare_reports_both_variances_side_by_side(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The point of the report is the comparison, so both rows have to be there.
+
+    A single standard error would let the reader believe the question of which
+    variance to use had been settled for them, and on serially dependent data the
+    two disagree by enough to change the conclusion.
+    """
+    text = run(capsys, "compare", str(sample / "trending.csv"), "ma5_40", "ma5_120")
+    assert "Jobson-Korkie / Memmel" in text
+    assert "Ledoit-Wolf" in text
+    assert "correlation" in text
+    assert "difference (annualised)" in text
+    assert "reject at 5%" in text
+    # Two data rows in the variance table, one per estimator.
+    assert text.count("0.0") >= 2
+
+
+def test_compare_takes_an_explicit_bandwidth(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Zero is the White case: no autocovariances, so no serial-dependence allowance.
+
+    The report names the bandwidth it used, because the robust standard error means
+    something different at each one and a figure without it cannot be reproduced.
+    """
+    default = run(capsys, "compare", str(sample / "trending.csv"), "ma5_40", "ma5_120")
+    assert "bandwidth 8" in default
+    zero = run(
+        capsys,
+        "compare",
+        str(sample / "trending.csv"),
+        "ma5_40",
+        "ma5_120",
+        "--bandwidth",
+        "0",
+    )
+    assert "bandwidth 0" in zero
+
+
+def test_compare_names_the_columns_it_has(sample: Path) -> None:
+    assert main(["compare", str(sample / "trending.csv"), "ma5_40", "absent"]) == 2
+
+
+def test_compare_refuses_a_column_against_itself(sample: Path) -> None:
+    """0/0 is not a p-value of one, and the report would read as if it were."""
+    assert main(["compare", str(sample / "trending.csv"), "ma5_40", "ma5_40"]) == 2

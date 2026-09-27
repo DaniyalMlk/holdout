@@ -13,14 +13,16 @@ import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 
 from . import __version__
 from .deflated import deflate_trials, minimum_track_record_length, probabilistic_sharpe_ratio
-from .exceptions import HoldoutError
+from .exceptions import HoldoutError, ValidationError
 from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
+from .pairwise import sharpe_difference
 from .pbo import probability_of_backtest_overfitting
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
@@ -222,6 +224,65 @@ def _cmd_mcs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compare(args: argparse.Namespace) -> int:
+    table = _load(args)
+    missing = [name for name in (args.first, args.second) if name not in table.names]
+    if missing:
+        raise ValidationError(
+            f"{args.file} has no column named {missing[0]!r}. It has "
+            f"{', '.join(repr(name) for name in table.names)}."
+        )
+    result = sharpe_difference(
+        table.column(args.first),
+        table.column(args.second),
+        bandwidth=args.bandwidth,
+        periods_per_year=args.periods_per_year,
+    )
+    scale = math.sqrt(args.periods_per_year)
+    print(
+        f"{result.observations} paired periods at {args.periods_per_year:g} per year, "
+        f"correlation {result.correlation:+.3f}\n"
+    )
+    rows = [
+        [args.first, f"{result.first * scale:.3f}"],
+        [args.second, f"{result.second * scale:.3f}"],
+        ["difference (annualised)", f"{result.annualised_difference:+.3f}"],
+    ]
+    print(_table(rows, ["series", "sharpe"]))
+    print()
+    comparison = []
+    for label, error in (
+        ("Jobson-Korkie / Memmel", result.closed_form_error),
+        (f"Ledoit-Wolf (bandwidth {result.bandwidth})", result.robust_error),
+    ):
+        statistic = result.difference / error
+        p_value = 2.0 * (1.0 - NormalDist().cdf(abs(statistic)))
+        comparison.append(
+            [
+                label,
+                f"{error * scale:.3f}",
+                f"{statistic:+.2f}",
+                f"{p_value:.4f}",
+                "yes" if p_value < 0.05 else "no",
+            ]
+        )
+    print(_table(comparison, ["variance", "s.e. (ann.)", "statistic", "p", "reject at 5%"]))
+    direction = (
+        "so the closed form is understating the uncertainty here, which is the "
+        "direction in which a difference looks real and is not"
+        if result.error_ratio > 1.0
+        else "so the closed form's assumptions are not costing anything on this pair"
+    )
+    print(
+        f"\nThe robust standard error is {result.error_ratio:.2f} times the closed-form "
+        f"one, {direction}. The closed form assumes independent normal returns; measured "
+        "on serially dependent series with a true null it rejects about a third of the "
+        "time at a persistence of 0.6, against the robust version's one in ten — better "
+        "and still not 5%."
+    )
+    return 0
+
+
 def _cmd_sample_data(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -299,6 +360,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(func=_cmd_mcs)
+
+    p = sub.add_parser(
+        "compare",
+        help="test whether two strategies have different Sharpe ratios",
+        description=(
+            "The pairwise comparison, which the bootstrap tools are the wrong tool "
+            "for: they control a family-wise error rate over a family of one. Reports "
+            "both the closed-form variance and the robust one, because the "
+            "disagreement between them is the finding when there is one."
+        ),
+    )
+    with_file(p)
+    p.add_argument("first", help="the strategy the difference is measured for")
+    p.add_argument("second", help="the strategy it is measured against")
+    p.add_argument(
+        "--bandwidth",
+        type=int,
+        default=None,
+        help="Bartlett truncation for the robust variance. Defaults to "
+        "floor(4 (n/100)^(2/9)); 0 uses no autocovariances at all.",
+    )
+    p.set_defaults(func=_cmd_compare)
 
     p = sub.add_parser("sample-data", help="write synthetic parameter sweeps")
     p.add_argument("--out", default="sample")

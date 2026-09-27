@@ -110,3 +110,54 @@ passes them — after which the studentised difference is of order 1e16 and the
 model is eliminated on a p-value of zero, which reads as overwhelming evidence
 rather than none. The threshold is relative to the largest standard error in the
 same set.
+
+## Phase 10 — Comparing exactly two strategies
+
+The library could test one candidate against a benchmark by bootstrap, many against
+one with a stepwise correction, and find the set indistinguishable from the best.
+It could not do the comparison people actually make most often. Pointing the family
+machinery at two strategies applies a multiple-testing correction to a single test,
+and differencing two `estimate_sharpe` standard errors ignores both the correlation
+between the series and the fact that a Sharpe ratio is a ratio of two estimated
+moments.
+
+- [x] Jobson-Korkie with Memmel's correction, the closed form under independent
+      normal returns
+- [x] Ledoit-Wolf: the delta method over the four sample moments with a
+      Newey-West covariance, robust to non-normality and serial dependence
+- [x] Both returned from one call, because their disagreement is the finding
+- [x] The Bartlett-kernel HAC covariance and the conventional bandwidth rule,
+      exposed rather than applied silently
+- [x] A `compare` command printing both variances, both statistics and the
+      bandwidth used
+- [x] The size of both tests measured in a worked example that runs in the suite
+
+The measurement, a thousand replications per regime on series correlated at 0.7
+with the same true Sharpe ratio and 500 paired periods, against a nominal 5%:
+
+| serial dependence | closed form | robust | error ratio |
+|---|---|---|---|
+| none | 4.2% | 4.7% | 0.99 |
+| AR(1), rho = 0.3 | 14.4% | 6.4% | 1.27 |
+| AR(1), rho = 0.6 | 34.7% | 10.0% | 1.65 |
+
+With independent returns both hold their size and the two standard errors agree to
+within one per cent, so the robust version costs nothing where it is not needed.
+Under dependence the closed form rejects a true null more than six times too often
+at a persistence of 0.6, and the robust version gets that to one in ten — better,
+and not right, because a Bartlett kernel truncated at a rule-of-thumb bandwidth
+recovers only part of the long-run variance. Both halves are in the README rather
+than only the favourable one.
+
+One defect found while writing the guards. numpy's standard deviation of a constant
+array is not exactly zero: subtracting the mean leaves rounding of order
+`eps * level`, 4.3e-19 on 0.001 repeated 500 times. A guard at zero therefore does
+not fire, the Sharpe ratio comes back as 2.3e15, and everything downstream is
+arithmetic on rounding error. The threshold is now relative to the series' own
+magnitude, which also makes it mean the same thing whether returns are quoted as
+fractions or in basis points.
+
+Comparing a series with itself is refused rather than answered with a p-value of
+one. The difference and its variance are both exactly zero, so the statistic is
+0/0, and "these are the same strategy" is a different statement from "the
+difference is not significant".

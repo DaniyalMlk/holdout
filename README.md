@@ -59,6 +59,7 @@ a slow cyclical drift — so everything below runs without real data.
 ```bash
 holdout sample-data --out sample
 holdout deflate sample/sweep.csv
+holdout compare sample/trending.csv ma5_40 ma5_120
 ```
 
 ```
@@ -109,8 +110,11 @@ CSV with one row per period and one column per strategy; see
 - [`examples/purged_cv.py`](examples/purged_cv.py) — a nearest-neighbour
   model with no skill scores a 0.20 forecast correlation under shuffled k-fold
   and none under purged k-fold.
+- [`examples/sharpe_difference.py`](examples/sharpe_difference.py) — how often
+  each variance of a Sharpe-ratio difference rejects a true null, in three
+  regimes of serial dependence.
 
-The test suite runs all four and checks the numbers they print.
+The test suite runs all five and checks the numbers they print.
 
 ## The design decision that mattered
 
@@ -439,6 +443,80 @@ them — after which the studentised difference is of order 1e16 and a model is
 eliminated on a p-value of zero, as though the evidence against it were
 overwhelming rather than absent.
 
+## Comparing exactly two strategies
+
+Everything above is built for families. `reality_check` and
+`superior_predictive_ability` test many candidates against one benchmark with the
+selection accounted for; `model_confidence_set` finds the set that cannot be told
+apart from the best. Pointing any of it at two strategies is applying a
+multiple-testing correction to a single test.
+
+The pairwise comparison has its own answer:
+
+```python
+from holdout import sharpe_difference
+
+result = sharpe_difference(strategy_a, strategy_b, periods_per_year=252)
+result.annualised_difference   # +0.59 of annualised Sharpe ratio
+result.correlation             # 0.656 — half of why this is not two separate tests
+result.closed_form_error       # Jobson–Korkie with Memmel's correction
+result.robust_error            # Ledoit–Wolf: delta method with a Newey–West covariance
+result.error_ratio             # the robust error over the closed-form one
+result.p_value                 # two-sided, using whichever `method` asked for
+```
+
+Differencing two `estimate_sharpe` standard errors is not a substitute, and it is
+wrong twice. It ignores the correlation between the series — for two strategies on
+the same market that is usually large, and it always *reduces* the variance of the
+difference, so the naive interval is too wide and a real difference goes unreported.
+And it treats a Sharpe ratio as if it were a mean, when it is a ratio of two
+estimated moments and the delta method has terms a difference of two independent
+errors does not.
+
+Both variances always come back, whichever the `method` argument selects for the
+headline statistic, because the disagreement between them is the finding when there
+is one.
+
+### What measuring them showed
+
+`examples/sharpe_difference.py` runs a thousand replications in each of three
+regimes, with the two series correlated at 0.7, the same true Sharpe ratio, and
+five hundred paired periods. A test at the 5% level should reject 5% of the time.
+
+| serial dependence | closed form | robust | robust error / closed-form error |
+|---|---|---|---|
+| none | 4.2% | 4.7% | 0.99 |
+| AR(1), ρ = 0.3 | 14.4% | 6.4% | 1.27 |
+| AR(1), ρ = 0.6 | **34.7%** | 10.0% | 1.65 |
+
+With independent returns the closed form is right and the robust version costs
+nothing: both land within a percentage point of nominal and the two standard errors
+agree to within one per cent. So there is no reason to prefer the closed form even
+where its assumptions hold.
+
+Serial dependence is where they part, and both halves of that are worth stating. At
+a persistence of 0.6 the closed form rejects a true null more than six times too
+often — a third of the time it reports a difference in Sharpe ratios that is not
+there — because it assumes independence and the difference of two persistent series
+has far more sampling variability than its formula allows. The robust version gets
+that to one in ten, which is better and **is not right**: a Bartlett kernel
+truncated at a rule-of-thumb bandwidth recovers only part of the long-run variance.
+Use the robust variance, and do not read its p-value as exact on data you believe is
+persistent.
+
+### Two refusals
+
+Comparing a series with itself is refused rather than answered. The difference is
+exactly zero and so is its variance, so the statistic is 0/0, and "these are the
+same strategy" is not the same statement as "the difference between these two is not
+significant" — a p-value of one would read as the second.
+
+A series that does not move has no Sharpe ratio, and the guard for it has to be
+*relative*. numpy's standard deviation of a constant array is not exactly zero:
+subtracting the mean leaves rounding of order `eps × level`, which on 0.001 repeated
+500 times is 4.3e-19. A guard at zero does not fire, the Sharpe ratio comes back as
+2.3e15, and every number after it is arithmetic on rounding error.
+
 ## Layout
 
 | Module | Contents |
@@ -454,4 +532,5 @@ overwhelming rather than absent.
 | `bootstrap` | stationary bootstrap and Politis–White block length |
 | `spa` | Reality Check, SPA, Romano–Wolf |
 | `mcs` | model confidence set, both statistics |
+| `pairwise` | difference of two Sharpe ratios, Memmel and Ledoit–Wolf variances, Newey–West |
 | `io`, `synthetic`, `cli` | CSV input, the sample sweeps, the `holdout` command |

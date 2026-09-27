@@ -28,6 +28,13 @@ from .multiple import (
     minimum_sharpe,
     minimum_t_statistic,
 )
+from .pairwise import (
+    SharpeDifference,
+    VarianceMethod,
+    newey_west_bandwidth,
+    newey_west_covariance,
+    sharpe_difference,
+)
 from .pbo import PBOResult, cscv_partitions, probability_of_backtest_overfitting
 from .series import as_matrix, as_returns
 from .sharpe import (
@@ -76,10 +83,12 @@ __all__ = [
     "RealityCheck",
     "RomanoWolf",
     "SPATest",
+    "SharpeDifference",
     "SharpeRatio",
     "Split",
     "Statistic",
     "ValidationError",
+    "VarianceMethod",
     "__version__",
     "adjust_pvalues",
     "as_matrix",
@@ -105,6 +114,8 @@ __all__ = [
     "minimum_track_record_length",
     "model_confidence_set",
     "moments",
+    "newey_west_bandwidth",
+    "newey_west_covariance",
     "number_of_paths",
     "optimal_block_length",
     "probabilistic_sharpe_ratio",
@@ -113,6 +124,7 @@ __all__ = [
     "reality_check",
     "romano_wolf",
     "serial_correlation_factor",
+    "sharpe_difference",
     "sharpe_ratio",
     "sharpe_standard_error",
     "skewness",
