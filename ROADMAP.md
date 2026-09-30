@@ -161,3 +161,55 @@ Comparing a series with itself is refused rather than answered with a p-value of
 one. The difference and its variance are both exactly zero, so the statistic is
 0/0, and "these are the same strategy" is a different statement from "the
 difference is not significant".
+
+## Phase 11 — Was the edge there throughout?
+
+- [x] The standardised Sharpe-ratio difference at every candidate break date,
+      using this library's own standard error under non-normal returns rather than
+      the normal one
+- [x] Its supremum, and where it falls
+- [x] A stationary-bootstrap null distribution for that supremum, so the maximum
+      and any serial correlation are handled together
+- [x] The naive p-value beside it, and the size distortion between them measured
+- [x] The power measured too, because it is the finding
+- [x] Vectorised over candidate dates and resamples, since 1.4 million subsample
+      Sharpe ratios with their skew and kurtosis cannot be a Python loop
+- [x] A command-line entry point that says what a large p-value is worth
+
+The measurement. Over 500 replications of 1,000 iid normal returns with no break at
+all, reading the supremum against a two-sided normal 5% critical value rejects
+41.4% of the time and the bootstrap rejects 3.2%, against a nominal 5% and a Monte
+Carlo standard error of about one point. At a 2% trim rather than the default 15%
+those become 58.8% and 7.0%, so the bootstrap absorbs most of the extra and not all
+of it, and the trim is an argument worth fixing before seeing the answer.
+
+The more useful measurement is the power, and it is poor. At 500 observations
+either side, a strategy whose per-period Sharpe ratio falls from 0.10 to 0.05 is
+detected 10% of the time, from 0.10 to 0.00 — a complete loss of edge — 25%, and
+from 0.12 to −0.04 52%. So a large p-value here is close to no evidence, which the
+module docstring and the command's own output both say. The test earns its place
+because when it does reject it rejects against the right distribution, not because
+it finds much.
+
+Two guards, and neither was right first time.
+
+The zero-variance check had to become relative. A constant stretch's second moment
+from power sums is not zero but the rounding left from subtracting two nearly equal
+sums, of order 1e-22 on daily returns; divided into a mean of 0.001 that is a
+Sharpe ratio of 1e8 and a break statistic of −2e9 — large enough to dominate every
+supremum and finite enough to pass every check for a NaN.
+
+And the refusal for a sample with no candidate break was nearly deleted as
+unreachable, on an argument that only covers even sample lengths. For an odd length
+the trim's ceiling can take the last candidate away; a sweep of every length from
+60 to 400 against every trim to 0.499 reaches it 389 times, all odd, all above a
+trim of 0.492.
+
+Three defects in the tests. A test asserting that 70 observations at a trim of 0.45
+are refused was asserting that two lower bounds on the same edge combine to be
+stricter than either, which they do not — it leaves seven candidates. The
+vectorised variance term was compared against the scalar one on skew and kurtosis
+drawn independently, which produces impossible pairs about a third of the time and
+failed inside the validator rather than on the comparison. And the constant-stretch
+test asserted a statistic of zero while the code was producing −2e9, which is how
+the relative guard was found.
