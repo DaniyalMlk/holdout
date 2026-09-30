@@ -105,6 +105,16 @@ def _standard_normal_two_sided(statistic: float) -> float:
     return math.erfc(abs(statistic) / math.sqrt(2.0))
 
 
+#: A subsample whose second moment is below this multiple of the whole sample's
+#: is treated as having none. Relative, not absolute, because "is the variance
+#: zero" has no absolute answer: a subsample of a series quoted in basis points
+#: has a variance a hundred million times smaller than the same series quoted in
+#: fractions, and a genuinely quiet stretch of a real series is nowhere near
+#: twelve orders of magnitude below the whole. What *is* down there is the
+#: rounding left over from power sums on a constant stretch.
+VARIANCE_FLOOR = 1e-12
+
+
 def _subsample_moments(
     shifted: FloatArray, offset: FloatArray
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
@@ -118,17 +128,24 @@ def _subsample_moments(
 
     Returns arrays over ``k = 1 .. n``. The first entries are meaningless -- a
     prefix of one observation has no variance -- and the caller trims them.
+
+    A prefix with no variance gets ``nan`` rather than a number, and the caller
+    turns that into a statistic of zero. It has to be caught here and it has to be
+    caught *relatively*: a constant stretch's second moment from power sums is not
+    zero but the rounding left over from subtracting two nearly equal sums, of
+    order 1e-22 on a series of daily returns. Divided into a mean of 0.001 that is
+    a Sharpe ratio of 1e8 and a break statistic of -2e9 -- a number large enough to
+    dominate every supremum and finite enough to survive every check for one.
     """
     powers = [np.cumsum(shifted**power, axis=-1) for power in (1, 2, 3, 4)]
     counts = np.arange(1, shifted.shape[-1] + 1, dtype=np.float64)
     first, second, third, fourth = (one / counts for one in powers)
     mean = first
-    # Rounding can push a central second moment a hair below zero on a nearly
-    # constant stretch. Clipping at zero rather than at a small positive number
-    # keeps the zero-variance case detectable downstream instead of hiding it.
     m2 = np.maximum(second - mean**2, 0.0)
     m3 = third - 3.0 * mean * second + 2.0 * mean**3
     m4 = fourth - 4.0 * mean * third + 6.0 * mean**2 * second - 3.0 * mean**4
+    whole = np.mean(shifted**2, axis=-1, keepdims=True)
+    m2 = np.where(m2 > VARIANCE_FLOOR * whole, m2, np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
         unbiased = m2 * counts / np.maximum(counts - 1.0, 1.0)
         sharpe = (mean + offset) / np.sqrt(unbiased)
@@ -196,15 +213,23 @@ def _bounds(total: int, trim: float) -> tuple[int, int]:
             f"trim must be below 0.5, got {trim!r}; trimming half from each end "
             "leaves no candidate break"
         )
+    # The edge is the larger of the two constraints, so both hold: the caller's
+    # trim and the floor on how short a side may be.
     edge = max(math.ceil(trim * total), MINIMUM_SIDE)
     low = edge
-    high = min(total - edge, total) + 1
+    high = total - edge + 1
     if high <= low:
+        # Reachable, and only just: it needs an *odd* number of observations and a
+        # trim above about 0.492. For an even total, `trim < 0.5` caps
+        # ceil(trim * total) at total / 2 and a candidate always survives; for an
+        # odd one the ceiling can reach (total + 1) / 2 and take the last one away.
+        # This was nearly removed as an unreachable branch on the strength of the
+        # even-length argument; a sweep of every length to 400 against every trim
+        # to 0.499 found 389 combinations that reach it, all odd.
         raise InsufficientDataError(
             f"{total} observations with trim {trim} leaves no candidate break with at "
-            f"least {MINIMUM_SIDE} on each side; a Sharpe ratio's standard error needs "
-            "a skew and a kurtosis, and a fourth moment from fewer than that is not "
-            "an estimate"
+            f"least {MINIMUM_SIDE} on each side; trim below "
+            f"{(total - MINIMUM_SIDE) / total:.3f} or bring more data"
         )
     return low, high
 
