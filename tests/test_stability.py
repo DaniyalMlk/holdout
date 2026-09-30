@@ -15,6 +15,7 @@ import math
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from holdout.exceptions import InsufficientDataError, ValidationError
 from holdout.sharpe import estimate_sharpe, sharpe_standard_error, sharpe_variance_term
@@ -29,13 +30,22 @@ from holdout.stability import (
 from holdout.stability import _variance_term as vectorised_variance_term
 
 
-def flat(seed: int, n: int = 1000, *, mean: float = 0.0, sd: float = 0.01) -> np.ndarray:
-    return np.random.default_rng(seed).normal(mean, sd, n)
+def flat(seed: int, n: int = 1000, *, mean: float = 0.0, sd: float = 0.01) -> NDArray[np.float64]:
+    # Annotated with the element type rather than a bare `np.ndarray`: the older
+    # numpy that Python 3.10 resolves to makes the generic's parameters required,
+    # so a bare annotation type-checks on 3.12 and fails on 3.10.
+    values: NDArray[np.float64] = np.random.default_rng(seed).normal(mean, sd, n)
+    return values
 
 
-def broken(seed: int, before: float, after: float, each: int = 500, sd: float = 0.01) -> np.ndarray:
+def broken(
+    seed: int, before: float, after: float, each: int = 500, sd: float = 0.01
+) -> NDArray[np.float64]:
     rng = np.random.default_rng(seed)
-    return np.concatenate([rng.normal(before, sd, each), rng.normal(after, sd, each)])
+    values: NDArray[np.float64] = np.concatenate(
+        [rng.normal(before, sd, each), rng.normal(after, sd, each)]
+    )
+    return values
 
 
 # -- the statistic -----------------------------------------------------------
