@@ -245,3 +245,96 @@ def test_compare_names_the_columns_it_has(sample: Path) -> None:
 def test_compare_refuses_a_column_against_itself(sample: Path) -> None:
     """0/0 is not a p-value of one, and the report would read as if it were."""
     assert main(["compare", str(sample / "trending.csv"), "ma5_40", "ma5_40"]) == 2
+
+
+def test_stability_prints_both_p_values_and_says_which_to_read(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "stability",
+        str(sample / "sweep.csv"),
+        "--bootstrap",
+        "99",
+        "--column",
+        "ma5_40",
+    )
+    assert "p (bootstrap)" in out
+    assert "p (naive)" in out
+    assert "The bootstrap p-value is the one to read" in out
+    # And it says what a large p-value is worth, because that is the reading
+    # this command makes easiest to get wrong.
+    assert "weak evidence" in out
+    assert "candidate break dates" in out
+
+
+def test_stability_reports_the_sharpe_ratio_either_side_of_the_break(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys, "stability", str(sample / "sweep.csv"), "--bootstrap", "99", "--column", "ma5_40"
+    )
+    line = next(one for one in out.splitlines() if one.startswith("ma5_40"))
+    fields = line.split()
+    assert len(fields) == 7
+    split = int(fields[1])
+    assert 0 < split < 2520
+    # Both Sharpe ratios are annualised, so they are of order one rather than of
+    # order a hundredth.
+    assert abs(float(fields[2])) < 10.0
+    assert abs(float(fields[3])) < 10.0
+    # The naive p-value is the smaller of the two on this series, which is the
+    # whole reason both are printed.
+    assert float(fields[6]) < float(fields[5])
+
+
+def test_stability_takes_a_trim_and_it_changes_the_search(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wide = run(
+        capsys,
+        "stability",
+        str(sample / "sweep.csv"),
+        "--bootstrap",
+        "49",
+        "--column",
+        "ma5_40",
+        "--trim",
+        "0.02",
+    )
+    narrow = run(
+        capsys,
+        "stability",
+        str(sample / "sweep.csv"),
+        "--bootstrap",
+        "49",
+        "--column",
+        "ma5_40",
+        "--trim",
+        "0.4",
+    )
+
+    def candidates(text: str) -> int:
+        return int(text.split("per year, ")[1].split(" candidate")[0])
+
+    assert candidates(wide) > candidates(narrow)
+    assert "trim 0.02" in wide
+    assert "trim 0.4" in narrow
+
+
+def test_stability_refuses_a_trim_of_a_half(sample: Path) -> None:
+    assert (
+        main(
+            [
+                "stability",
+                str(sample / "sweep.csv"),
+                "--bootstrap",
+                "9",
+                "--column",
+                "ma5_40",
+                "--trim",
+                "0.5",
+            ]
+        )
+        == 2
+    )
