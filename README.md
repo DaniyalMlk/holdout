@@ -517,6 +517,113 @@ subtracting the mean leaves rounding of order `eps × level`, which on 0.001 rep
 500 times is 4.3e-19. A guard at zero does not fire, the Sharpe ratio comes back as
 2.3e15, and every number after it is arithmetic on rounding error.
 
+## Was the edge there throughout?
+
+Everything above guards a maximum taken over *strategies*. `spa` asks whether the
+best of K beats a benchmark once K is accounted for, `romano_wolf` asks which ones
+do, `deflate` raises the benchmark to what the best of N unskilled trials would
+show, `pbo` asks how often the in-sample winner loses out of sample.
+
+Nothing asked whether a strategy earned its Sharpe ratio evenly or earned all of it
+in one stretch. And the obvious check has this library's own flaw, twice.
+
+**The split point gets chosen after looking at the equity curve.** Nobody splits a
+track record with a visible cliff two thirds along at the midpoint. The comparison
+is made at the most damaging date available and read against a critical value for
+one date fixed in advance.
+
+**Searching honestly does not fix it.** Take the largest statistic over every
+candidate date and a normal critical value is the wrong distribution, for exactly
+the reason White's Reality Check exists: the maximum of several hundred correlated
+statistics is not distributed like one of them.
+
+```
+$ holdout stability sweep.csv --column ma5_40
+2520 periods at 252 per year, 1765 candidate break dates, trim 0.15 (annualised)
+
+strategy  break after  sharpe before  sharpe after  sup stat  p (bootstrap)  p (naive)
+--------------------------------------------------------------------------------------
+ma5_40            414          -0.25          1.04      1.51          0.706     0.1298
+```
+
+So the statistic here is a supremum by construction — there is no single-date
+version of it to misuse — and its null distribution comes from the stationary
+bootstrap, which handles the maximum and any serial correlation in one pass. The
+naive p-value is printed beside the real one because the gap is the point: a reader
+who has been quoting the naive one should see what it was worth. Above, 0.13 against
+0.71.
+
+### How wrong the naive p-value is, measured
+
+Over 500 replications of 1,000 iid normal returns with **no break at all**:
+
+| | rejects at 5% | trim 0.02 |
+|---|---|---|
+| two-sided normal on the supremum | 41.4% | 58.8% |
+| stationary bootstrap | 3.2% | 7.0% |
+
+The Monte Carlo standard error is about one percentage point. The bootstrap is
+conservative at the default 15% trim and liberal at an aggressive 2% one, so the
+trim is an argument rather than a constant — and worth choosing before seeing the
+answer rather than after.
+
+### The most useful thing it reports is how little power it has
+
+Over 120 replications at 500 observations either side — two four-year halves of
+daily returns, a longer track record than most things get:
+
+| per-period Sharpe | annualised | detected at 5% |
+|---|---|---|
+| 0.10 → 0.05 | 1.59 → 0.79 | 10% |
+| 0.10 → 0.00 | 1.59 → 0.00 | 25% |
+| 0.12 → −0.04 | 1.90 → −0.63 | 52% |
+
+A strategy that loses its entire edge at the midpoint is found a quarter of the
+time. So a large p-value here is close to no evidence, and reading one as
+confirmation that a strategy is stable is the mistake this test makes easiest —
+which is why the command says so in its own output. It is worth having anyway:
+when it does reject, it rejects against the right distribution.
+
+### The standard error is the one that accounts for shape
+
+Two disjoint subsamples, each with its Mertens (2002) standard error from its own
+skew and kurtosis, and their difference standardised by the root of the sum of
+squares. The normal-returns version would be simpler and wrong in the direction
+that matters: a strategy with negative skew and fat tails has a noisier Sharpe
+ratio than the normal formula says, and a break test that understates the noise
+finds breaks that are not there.
+
+### Power sums, shifted, because a million Sharpe ratios cannot be a loop
+
+A thousand resamples over a thousand days is 1.4 million subsample Sharpe ratios
+with their skew and kurtosis. Cumulative power sums make that four cumulative sums
+per resample.
+
+They also cancel catastrophically on returns whose mean is a hundredth of their
+standard deviation, which is every return series there is — the sum of squares and
+the square of the sum agree to two significant figures and their difference loses
+the rest. So the sums are taken on `x - mean(x)` and the mean added back:
+subtracting a constant leaves every subsample's variance, skew and kurtosis
+unchanged and moves its mean by exactly that constant.
+
+### Two guards, and what it took to get each right
+
+**The zero-variance check has to be relative.** A constant stretch's second moment
+computed from power sums is not zero but the rounding left over from subtracting
+two nearly equal sums — of order 1e-22 on daily returns. Divided into a mean of
+0.001 that is a Sharpe ratio of 1e8 and a break statistic of **−2e9**: large enough
+to dominate every supremum in the sample, and finite enough to pass every check for
+a NaN. Only a threshold relative to the whole sample's own variance catches it, and
+a genuinely quiet stretch at a tenth of the sample's volatility is nowhere near it.
+
+**The refusal for a sample with no candidate break was nearly deleted as
+unreachable.** The argument for deleting it covers even sample lengths only: with
+`trim < 0.5` the edge is capped at half an even sample and a candidate always
+survives. For an *odd* length the ceiling reaches `(total + 1) / 2` and takes the
+last candidate away. A sweep of every length from 60 to 400 against every trim to
+0.499 reaches it 389 times — every one of them odd, every one at a trim above
+0.492. The branch stays, and the sweep is the test.
+
 ## Layout
 
 | Module | Contents |

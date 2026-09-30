@@ -64,11 +64,20 @@ from .splits import (
     purged_kfold,
     walk_forward,
 )
+from .stability import (
+    DEFAULT_TRIM,
+    BreakStatistics,
+    SharpeBreak,
+    break_statistics,
+    sharpe_break,
+)
 from .trials import effective_number_of_trials, trial_correlation
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "DEFAULT_TRIM",
+    "BreakStatistics",
     "ColumnMeans",
     "CombinatorialPurgedCV",
     "DeflatedSharpe",
@@ -83,6 +92,7 @@ __all__ = [
     "RealityCheck",
     "RomanoWolf",
     "SPATest",
+    "SharpeBreak",
     "SharpeDifference",
     "SharpeRatio",
     "Split",
@@ -96,6 +106,7 @@ __all__ = [
     "autocorrelation",
     "autocorrelation_adjusted_sharpe",
     "bootstrap_column_means",
+    "break_statistics",
     "combinatorial_purged_cv",
     "cscv_partitions",
     "deflate_trials",
@@ -124,6 +135,7 @@ __all__ = [
     "reality_check",
     "romano_wolf",
     "serial_correlation_factor",
+    "sharpe_break",
     "sharpe_difference",
     "sharpe_ratio",
     "sharpe_standard_error",

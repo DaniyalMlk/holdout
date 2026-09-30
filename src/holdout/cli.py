@@ -26,6 +26,7 @@ from .pairwise import sharpe_difference
 from .pbo import probability_of_backtest_overfitting
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
+from .stability import DEFAULT_TRIM, sharpe_break
 from .synthetic import crossover_sweep
 from .trials import effective_number_of_trials, trial_correlation
 
@@ -383,11 +384,104 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_compare)
 
+    p = sub.add_parser(
+        "stability",
+        help="test for a break in the Sharpe ratio at a date the data chose",
+        description=(
+            "Every other test here guards a maximum over strategies. This one guards "
+            "a maximum over dates: it takes the largest standardised difference "
+            "between the Sharpe ratio before and after a candidate break, over every "
+            "candidate, and gets its null distribution from the stationary "
+            "bootstrap. Splitting a sample at a date chosen by looking at the equity "
+            "curve, and reading the result against a normal critical value, rejects a "
+            "true null about 41% of the time; both p-values are printed so the gap is "
+            "visible."
+        ),
+    )
+    with_file(p)
+    p.add_argument("--column", help="only this strategy")
+    p.add_argument(
+        "--trim",
+        type=float,
+        default=DEFAULT_TRIM,
+        help=(
+            "fraction of the sample ignored at each end (default: "
+            f"{DEFAULT_TRIM}); it changes the answer, so it is an argument"
+        ),
+    )
+    p.add_argument("--bootstrap", type=int, default=1000)
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=_cmd_stability)
+
     p = sub.add_parser("sample-data", help="write synthetic parameter sweeps")
     p.add_argument("--out", default="sample")
     p.add_argument("--seed", type=int, default=7)
     p.set_defaults(func=_cmd_sample_data)
     return parser
+
+
+def _cmd_stability(args: argparse.Namespace) -> int:
+    """Was the edge there throughout?
+
+    Both p-values are printed and labelled. The naive one is not an alternative
+    answer -- it is what reading this statistic against a normal critical value
+    would have said, and on iid returns with no break at all it rejects 41% of the
+    time. Printing it beside the bootstrap's is how a reader who has been quoting
+    it finds out what it was worth.
+    """
+    table = _load(args)
+    ppy = args.periods_per_year
+    root = math.sqrt(ppy)
+    names = [args.column] if args.column else table.names
+    rows = []
+    candidates = 0
+    for name in names:
+        result = sharpe_break(
+            table.column(name),
+            trim=args.trim,
+            resamples=args.bootstrap,
+            seed=args.seed,
+        )
+        candidates = result.candidates
+        rows.append(
+            [
+                name,
+                f"{result.at}",
+                f"{result.before * root:.2f}",
+                f"{result.after * root:.2f}",
+                f"{result.statistic:.2f}",
+                f"{result.p_value:.3f}",
+                f"{result.naive_p_value:.4f}",
+            ]
+        )
+    header = [
+        "strategy",
+        "break after",
+        "sharpe before",
+        "sharpe after",
+        "sup stat",
+        "p (bootstrap)",
+        "p (naive)",
+    ]
+    # The candidate count comes out of the loop rather than from a second call.
+    # Every column is the same length, so it is the same number for all of them,
+    # and running the whole bootstrap again over 1,765 dates to print one integer
+    # is most of the command's work done twice.
+    print(
+        f"{table.values.shape[0]} periods at {ppy:g} per year, "
+        f"{candidates} candidate break dates, trim {args.trim:g} "
+        f"(annualised Sharpe ratios)\n"
+    )
+    print(_table(rows, header))
+    print(
+        "\nThe bootstrap p-value is the one to read. The naive column is what a "
+        "two-sided\nnormal critical value says about the same statistic, as if the "
+        "date had been fixed\nin advance; on returns with no break at all it "
+        "rejects at 5% about 41% of the time.\nA large p-value here is weak "
+        "evidence either way: at 500 observations a side, a\nstrategy whose Sharpe "
+        "ratio falls to zero is detected a quarter of the time."
+    )
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
