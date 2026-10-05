@@ -624,6 +624,64 @@ last candidate away. A sweep of every length from 60 to 400 against every trim t
 0.499 reaches it 389 times — every one of them odd, every one at a trim above
 0.492. The branch stays, and the sweep is the test.
 
+## The other half of the overlapping-label problem
+
+The section above purges overlapping labels out of the training set, which fixes
+the leakage. It does not fix the counting. Twenty observations whose five-day
+windows cover the same week carry about one week of information between them,
+and every estimator that averages over observations treats them as twenty. The
+symptom is a t statistic too large for the data behind it, and purging never
+touches it, because nothing has leaked.
+
+`uniqueness` supplies the number to divide by instead of `n`. Concurrency is how
+many label windows span each bar; an observation's average uniqueness is the
+mean of `1 / concurrency` over its own window; the sum of those is the effective
+sample size. On a purged training set of 120 observations with ten-bar rolling
+windows it comes out under a quarter of the length.
+
+One identity holds whatever the overlap looks like, and it is the check that the
+arithmetic is right rather than merely self-consistent — both sides count the
+same thing:
+
+    sum over i of (uniqueness_i * length_i) == number of covered bars
+
+### The sequential bootstrap is worth less than it is sold for
+
+Drawing with a probability proportional to each candidate's uniqueness given
+what is already drawn sounds like it fixes the redundancy at its source.
+Measured, it mostly does not, and the reason is arithmetic. Total concurrency
+over a draw is `size * length` however it is drawn, so achievable uniqueness is
+capped at `span / (size * length)`, and attaining the cap means flattening the
+concurrency — which is all any scheme can try to do. As a fraction of that cap,
+over sixty seeds on two hundred observations with twenty-bar windows:
+
+| draws | cap | sequential | uniform | gain |
+| --- | --- | --- | --- | --- |
+| 200 | 0.0548 | 0.998 | 0.995 | +0.44% ± 0.09% |
+| 40 | 0.2737 | 0.978 | 0.946 | +3.47% ± 0.55% |
+| 10 | 1.0 | 0.729 | 0.673 | +10.43% ± 2.31% |
+| 5 | 1.0 | 0.865 | 0.809 | +9.37% ± 2.80% |
+
+The heavy-overlap, full-size resample is the case the method is motivated by and
+the case in which it cannot help: the uniform bootstrap is already at 99.5% of a
+cap nothing can exceed. The gain is real only once the draw is small against the
+span. Its largest gain of all is on non-overlapping point labels, where there is
+no overlap problem and the only redundancy left is duplicate draws — which is
+the clearest sign of what it is actually doing.
+
+So the remedy for heavy overlap is to draw fewer observations, and the effective
+sample size says how many.
+
+Weights come two ways: proportional to uniqueness, and a time decay that is
+linear in *cumulative uniqueness* rather than in time, so a stretch of redundant
+observations ages like the information it carries. Ten redundant observations
+worth one observation out of eleven get 7.8% of the weight on that scale against
+26.2% on an index-linear one.
+
+```bash
+holdout uniqueness --count 200 --window 20
+```
+
 ## Layout
 
 | Module | Contents |
@@ -636,6 +694,7 @@ last candidate away. A sweep of every length from 60 to 400 against every trim t
 | `multiple` | adjusted p-values, haircut Sharpe ratios, minimum t-statistic |
 | `pbo` | combinatorially symmetric cross-validation |
 | `splits` | walk-forward, purged k-fold, combinatorial purged CV, leakage audit |
+| `uniqueness` | concurrency, average uniqueness, sample weights, sequential bootstrap |
 | `bootstrap` | stationary bootstrap and Politis–White block length |
 | `spa` | Reality Check, SPA, Romano–Wolf |
 | `mcs` | model confidence set, both statistics |

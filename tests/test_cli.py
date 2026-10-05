@@ -338,3 +338,44 @@ def test_stability_refuses_a_trim_of_a_half(sample: Path) -> None:
         )
         == 2
     )
+
+
+def test_uniqueness_reports_the_identity_and_the_cap(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = run(capsys, "uniqueness", "--count", "200", "--window", "20", "--replications", "3")
+    # Two hundred twenty-bar rolling windows span 219 bars and are worth about
+    # eleven independent observations, which is the number the command exists
+    # to print.
+    assert "effective sample size: 10.95 of 200" in out
+    assert "peak concurrency:      20" in out
+    assert "identity check:        sum(uniqueness * length) = 219.000000" in out
+    assert "against 219 covered bars" in out
+    # The full-size draw sits on a cap it cannot beat; the small one does not.
+    rows = {
+        line.split()[0]: line.split()
+        for line in out.splitlines()
+        if line[:1].isdigit() and len(line.split()) == 5
+    }
+    assert float(rows["200"][2]) > 0.99
+    assert float(rows["200"][3]) > 0.99
+    assert float(rows["10"][2]) < 0.9
+
+
+def test_uniqueness_reads_a_label_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "labels.csv"
+    path.write_text("0,4\n5,9\n10,14\n", encoding="utf-8")
+    out = run(capsys, "uniqueness", "--labels", str(path), "--replications", "2")
+    assert "3 labels over bars 0..14" in out
+    assert "average uniqueness:    1.0000" in out
+    assert "effective sample size: 3.00 of 3" in out
+
+
+def test_uniqueness_needs_either_a_file_or_a_shape(tmp_path: Path) -> None:
+    assert main(["uniqueness"]) == 2
+
+
+def test_uniqueness_rejects_a_label_file_of_the_wrong_shape(tmp_path: Path) -> None:
+    path = tmp_path / "labels.csv"
+    path.write_text("0,4,9\n5,9,14\n", encoding="utf-8")
+    assert main(["uniqueness", "--labels", str(path)]) == 2
