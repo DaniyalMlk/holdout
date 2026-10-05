@@ -34,13 +34,14 @@ on randomised structures rather than on an example.
 with a probability proportional to each candidate's uniqueness given what is
 already drawn, which sounds like it should fix the redundancy at its source.
 Measured, it fixes almost none of it in the regime it is sold for: at full size
-over heavily overlapping labels, the uniform bootstrap already achieves 99.6%
-of a ceiling that no sampling scheme can exceed, and the sequential one gets
-99.8%. The ceiling is the point — total concurrency over the draw is
-``size * length`` however it is drawn, so uniqueness is capped at
-``span / (size * length)``. Where that cap is not binding, which means a draw
-small against the span, the sequential scheme is genuinely better by eight to
-eleven points of the cap. :func:`sequential_bootstrap` carries the table.
+over heavily overlapping labels the uniform bootstrap already achieves 99.5% of
+a ceiling that no sampling scheme can exceed, and the sequential one gets
+99.8%, a gain of ``+0.44%`` against a standard error of ``0.09%``. The ceiling
+is the point — total concurrency over the draw is ``size * length`` however it
+is drawn, so uniqueness is capped at ``span / (size * length)``. Where that cap
+is not binding, which means a draw small against the span, the sequential
+scheme is genuinely better, by up to about ten per cent.
+:func:`sequential_bootstrap` carries the table.
 
 **This module needs integer bar indices where** :mod:`holdout.splits` **accepts
 any comparable numbers**, and the difference is not an oversight. Purging only
@@ -413,28 +414,29 @@ def sequential_bootstrap(
     ``size * length`` whatever is drawn, so the achievable average uniqueness
     is capped at ``span / (size * length)``, or one if that exceeds one — and
     the cap is attained by flattening the concurrency, which is all any
-    sampling scheme can try to do. Measured against that cap, over twelve seeds
-    on two hundred observations with twenty-bar windows:
+    sampling scheme can try to do. Over sixty seeds, two hundred observations,
+    twenty-bar rolling windows, as a fraction of that cap:
 
-    ========  =======  ==========  ========
-    draws     cap      sequential  uniform
-    ========  =======  ==========  ========
-    200       0.0548   0.998       0.996
-    100       0.1095   0.991       0.988
-    40        0.2737   0.970       0.956
-    10        1.0      0.753       0.674
-    5         1.0      0.916       0.803
-    ========  =======  ==========  ========
+    ======  ======  ==========  =======  ================
+    draws   cap     sequential  uniform  gain
+    ======  ======  ==========  =======  ================
+    200     0.0548  0.998       0.995    +0.44% +- 0.09%
+    100     0.1095  0.995       0.984    +1.03% +- 0.19%
+    40      0.2737  0.978       0.946    +3.47% +- 0.55%
+    20      0.5475  0.897       0.830    +8.78% +- 1.37%
+    10      1.0     0.729       0.673    +10.43% +- 2.31%
+    5       1.0     0.865       0.809    +9.37% +- 2.80%
+    ======  ======  ==========  =======  ================
 
-    So the gain is real where the draw is small against the span — eight to
-    eleven points of the cap at ten draws and five — and it is nothing at all
-    at full size, where the uniform bootstrap already reaches 99.6% of a cap
-    that no scheme can beat. That is the opposite of how this is usually
-    described: the heavy-overlap, full-size resample is the case the sequential
-    bootstrap is motivated by and the case in which it cannot help, because
-    there the binding constraint is arithmetic rather than algorithmic. Over
-    twenty seeds at full size the advantage is ``+0.35%`` against a spread of
-    ``0.43%``, which is not distinguishable from zero.
+    The gain rises as the draw shrinks and then plateaus around ten per cent;
+    at full size it is under half a per cent, because the uniform bootstrap
+    already reaches 99.5% of a cap no scheme can beat. That is the opposite of
+    how this is usually described. The heavy-overlap, full-size resample is the
+    case the sequential bootstrap is motivated by and the case in which it
+    cannot help, because there the binding constraint is arithmetic rather than
+    algorithmic: two hundred twenty-bar windows laid over a two-hundred-and-
+    nineteen-bar span force a mean concurrency near eighteen whichever windows
+    are chosen.
 
     The remedy for heavy overlap is therefore to draw *fewer* observations, and
     :func:`effective_sample_size` is the number saying how many. Drawing all
