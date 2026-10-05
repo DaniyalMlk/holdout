@@ -72,6 +72,17 @@ from .stability import (
     sharpe_break,
 )
 from .trials import effective_number_of_trials, trial_correlation
+from .uniqueness import (
+    Concurrency,
+    SequentialDraw,
+    average_uniqueness,
+    concurrency,
+    drawn_uniqueness,
+    effective_sample_size,
+    sequential_bootstrap,
+    time_decay_weights,
+    uniqueness_weights,
+)
 
 __version__ = "0.1.0"
 
@@ -80,6 +91,7 @@ __all__ = [
     "BreakStatistics",
     "ColumnMeans",
     "CombinatorialPurgedCV",
+    "Concurrency",
     "DeflatedSharpe",
     "Elimination",
     "Haircut",
@@ -92,6 +104,7 @@ __all__ = [
     "RealityCheck",
     "RomanoWolf",
     "SPATest",
+    "SequentialDraw",
     "SharpeBreak",
     "SharpeDifference",
     "SharpeRatio",
@@ -105,13 +118,17 @@ __all__ = [
     "as_returns",
     "autocorrelation",
     "autocorrelation_adjusted_sharpe",
+    "average_uniqueness",
     "bootstrap_column_means",
     "break_statistics",
     "combinatorial_purged_cv",
+    "concurrency",
     "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
+    "drawn_uniqueness",
     "effective_number_of_trials",
+    "effective_sample_size",
     "estimate_sharpe",
     "expected_maximum_normal",
     "expected_maximum_sharpe",
@@ -134,6 +151,7 @@ __all__ = [
     "purged_kfold",
     "reality_check",
     "romano_wolf",
+    "sequential_bootstrap",
     "serial_correlation_factor",
     "sharpe_break",
     "sharpe_difference",
@@ -142,6 +160,8 @@ __all__ = [
     "skewness",
     "stationary_bootstrap_indices",
     "superior_predictive_ability",
+    "time_decay_weights",
     "trial_correlation",
+    "uniqueness_weights",
     "walk_forward",
 ]

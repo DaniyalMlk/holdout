@@ -29,6 +29,14 @@ from .spa import reality_check, romano_wolf, superior_predictive_ability
 from .stability import DEFAULT_TRIM, sharpe_break
 from .synthetic import crossover_sweep
 from .trials import effective_number_of_trials, trial_correlation
+from .uniqueness import (
+    average_uniqueness,
+    concurrency,
+    effective_sample_size,
+    sequential_bootstrap,
+    time_decay_weights,
+    uniqueness_weights,
+)
 
 __all__ = ["main"]
 
@@ -294,6 +302,97 @@ def _cmd_sample_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_uniqueness(args: argparse.Namespace) -> int:
+    """Report what overlapping labels cost, and what resampling them can recover.
+
+    The second half is the part worth printing. The effective sample size says
+    how much information is there; the bootstrap table says how much of it any
+    sampling scheme could possibly reach, which is capped by arithmetic rather
+    than by cleverness, and how close each scheme gets.
+    """
+    if args.labels is not None:
+        rows = np.loadtxt(args.labels, delimiter=",", ndmin=2)
+        if rows.shape[1] != 2:
+            raise ValidationError(
+                f"{args.labels} has {rows.shape[1]} columns; a label file holds two, "
+                "the first and last bar of each window"
+            )
+        start, end = rows[:, 0], rows[:, 1]
+    else:
+        if args.count is None or args.window is None:
+            raise ValidationError(
+                "give --labels, or --count and --window to describe a rolling structure"
+            )
+        start = np.arange(0, args.count * args.step, args.step, dtype=np.int64)
+        end = start + args.window - 1
+
+    counts = concurrency(start, end)
+    unique = average_uniqueness(start, end)
+    weights = uniqueness_weights(start, end)
+    observations = unique.size
+    effective = effective_sample_size(start, end)
+
+    print(f"{observations} labels over bars {counts.first}..{counts.last}")
+    print(f"covered bars:          {counts.covered_bars}")
+    print(f"peak concurrency:      {counts.peak}")
+    print(
+        f"average uniqueness:    {unique.mean():.4f}"
+        f"  (min {unique.min():.4f}, max {unique.max():.4f})"
+    )
+    print(f"effective sample size: {effective:.2f} of {observations}")
+    print(f"weight range:          {weights.min():.3e} to {weights.max():.3e}")
+    lengths = np.asarray(end, dtype=np.float64) - np.asarray(start, dtype=np.float64) + 1.0
+    print(
+        f"identity check:        sum(uniqueness * length) = "
+        f"{float((unique * lengths).sum()):.6f}"
+        f" against {counts.covered_bars} covered bars"
+    )
+
+    print()
+    print("time-decay weights over cumulative uniqueness (oldest, newest):")
+    for decay in (1.0, 0.5, 0.0, -0.5):
+        schedule = time_decay_weights(unique, decay=decay)
+        kept = int(np.count_nonzero(schedule))
+        print(
+            f"  decay {decay:>5}: {schedule[0]:.4f} to {schedule[-1]:.4f}, "
+            f"{kept} of {observations} keep any weight"
+        )
+
+    print()
+    print("resampling, as a fraction of the cap no scheme can beat:")
+    span = counts.last - counts.first + 1
+    length = float(lengths.mean())
+    rows_out = []
+    for divisor in (1, 2, 5, 20):
+        draws = max(1, observations // divisor)
+        cap = min(1.0, span / (draws * length))
+        achieved = []
+        uniform = []
+        for offset in range(args.replications):
+            drawn = sequential_bootstrap(start, end, size=draws, seed=args.seed + offset)
+            achieved.append(drawn.achieved)
+            uniform.append(drawn.uniform)
+        mean_achieved = float(np.mean(achieved))
+        mean_uniform = float(np.mean(uniform))
+        rows_out.append(
+            [
+                f"{draws}",
+                f"{cap:.4f}",
+                f"{mean_achieved / cap:.3f}",
+                f"{mean_uniform / cap:.3f}",
+                f"{mean_achieved / mean_uniform - 1.0:+.2%}",
+            ]
+        )
+    print(_table(rows_out, ["draws", "cap", "sequential", "uniform", "gain"]))
+    print(
+        "The cap is span / (draws * length): total concurrency over a draw does not\n"
+        "depend on which observations are drawn, so no sampling scheme can exceed it.\n"
+        "Where it binds, the uniform bootstrap is already at it and drawing cleverly\n"
+        "buys nothing. The remedy for heavy overlap is to draw fewer observations."
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="holdout", description="Judge whether a backtest is evidence of anything."
@@ -412,6 +511,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--bootstrap", type=int, default=1000)
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(func=_cmd_stability)
+
+    p = sub.add_parser(
+        "uniqueness",
+        help="what overlapping labels cost, and what resampling can recover",
+        description=(
+            "Reports concurrency, average uniqueness and the effective sample size "
+            "for a set of label windows, both weight schedules, and how close each "
+            "bootstrap gets to the cap that arithmetic places on any of them. Takes "
+            "a two-column CSV of first and last bar, or --count and --window to "
+            "describe a rolling structure."
+        ),
+    )
+    p.add_argument("--labels", type=Path, default=None, help="CSV of start,end bar indices")
+    p.add_argument("--count", type=int, default=None, help="number of rolling windows")
+    p.add_argument("--window", type=int, default=None, help="bars per window")
+    p.add_argument("--step", type=int, default=1, help="bars between window starts")
+    p.add_argument("--replications", type=int, default=8)
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=_cmd_uniqueness)
 
     p = sub.add_parser("sample-data", help="write synthetic parameter sweeps")
     p.add_argument("--out", default="sample")
