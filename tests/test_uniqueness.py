@@ -29,6 +29,7 @@ import pytest
 from holdout.exceptions import InsufficientDataError, ValidationError
 from holdout.splits import purged_kfold
 from holdout.uniqueness import (
+    IndexArray,
     average_uniqueness,
     concurrency,
     drawn_uniqueness,
@@ -39,12 +40,12 @@ from holdout.uniqueness import (
 )
 
 
-def _rolling(count: int, length: int, step: int = 1) -> tuple[np.ndarray, np.ndarray]:
+def _rolling(count: int, length: int, step: int = 1) -> tuple[IndexArray, IndexArray]:
     start = np.arange(0, count * step, step, dtype=np.int64)
     return start, start + length - 1
 
 
-def _random_labels(generator: np.random.Generator, count: int) -> tuple[np.ndarray, np.ndarray]:
+def _random_labels(generator: np.random.Generator, count: int) -> tuple[IndexArray, IndexArray]:
     start = np.sort(generator.integers(0, 200, size=count)).astype(np.int64)
     length = generator.integers(1, 30, size=count).astype(np.int64)
     return start, start + length - 1

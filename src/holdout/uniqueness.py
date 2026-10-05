@@ -65,6 +65,7 @@ from .series import FloatArray
 
 __all__ = [
     "Concurrency",
+    "IndexArray",
     "SequentialDraw",
     "average_uniqueness",
     "concurrency",
