@@ -362,9 +362,7 @@ def test_uniqueness_reports_the_identity_and_the_cap(
     assert float(rows["10"][2]) < 0.9
 
 
-def test_uniqueness_reads_a_label_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_uniqueness_reads_a_label_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = tmp_path / "labels.csv"
     path.write_text("0,4\n5,9\n10,14\n", encoding="utf-8")
     out = run(capsys, "uniqueness", "--labels", str(path), "--replications", "2")
