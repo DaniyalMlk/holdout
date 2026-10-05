@@ -213,3 +213,100 @@ drawn independently, which produces impossible pairs about a third of the time a
 failed inside the validator rather than on the comparison. And the constant-stretch
 test asserted a statistic of zero while the code was producing −2e9, which is how
 the relative guard was found.
+
+## Phase 12 — The other half of the overlapping-label problem
+
+- [x] Concurrency per bar, from a difference array rather than by marking windows
+- [x] Average uniqueness per observation, and the effective sample size it implies
+- [x] The exact identity `sum(uniqueness * length) == covered bars`, asserted on
+      randomised overlap structures
+- [x] Sample weights from uniqueness, and a time-decay schedule over *cumulative
+      uniqueness* rather than over time
+- [x] A sequential bootstrap, drawing on uniqueness given what is already drawn
+- [x] The cap that arithmetic places on any sampling scheme, and each scheme
+      measured against it
+- [x] A command-line entry point reporting all of it, including the identity
+
+Phase 5 fixes the overlapping-label problem in the *splitter*. Purging drops
+every training observation whose label window touches a test window, and the
+leakage audit proves it worked. That is the right fix and it is half the
+problem.
+
+The other half is a counting error. Twenty observations whose five-day windows
+cover the same week carry about one week of information between them, and every
+estimator that averages over observations — a Sharpe ratio, a bootstrap, a
+fitted model — treats them as twenty. Purging does not touch it, because nothing
+has leaked; the observations are simply redundant. The symptom is a t statistic
+too large for the data behind it, and the fix is a different number to divide
+by. `effective_sample_size` is that number: `n` when nothing overlaps, one when
+everything does, and in between it is what it is. On a purged training set of
+120 observations with ten-bar rolling windows it comes out under a quarter of
+the length, which the splitter has no way to report.
+
+**One exact identity holds whatever the structure**, and it is the check that
+the arithmetic is right rather than merely self-consistent:
+
+    sum over i of (uniqueness_i * length_i) == number of covered bars
+
+because both sides count `sum over covered bars of c / c`. It survives gaps,
+nesting, duplicated windows and single-bar labels, and it is asserted on twelve
+randomised structures rather than on an example.
+
+**The sequential bootstrap is the part that did not survive measurement.** It
+draws with a probability proportional to each candidate's uniqueness given what
+is already drawn, which sounds like it should fix the redundancy at its source.
+Total concurrency over a draw is `size * length` however it is drawn, so the
+achievable average uniqueness is capped at `span / (size * length)` — and the
+cap is attained by flattening the concurrency, which is all any scheme can try
+to do. As a fraction of that cap, over sixty seeds on two hundred observations
+with twenty-bar windows:
+
+| draws | cap | sequential | uniform | gain |
+| --- | --- | --- | --- | --- |
+| 200 | 0.0548 | 0.998 | 0.995 | +0.44% ± 0.09% |
+| 100 | 0.1095 | 0.995 | 0.984 | +1.03% ± 0.19% |
+| 40 | 0.2737 | 0.978 | 0.946 | +3.47% ± 0.55% |
+| 20 | 0.5475 | 0.897 | 0.830 | +8.78% ± 1.37% |
+| 10 | 1.0 | 0.729 | 0.673 | +10.43% ± 2.31% |
+| 5 | 1.0 | 0.865 | 0.809 | +9.37% ± 2.80% |
+
+So the gain is real where the draw is small against the span, rising to about
+ten per cent and then plateauing, and it is nothing at full size — under half a
+per cent, where the uniform bootstrap already reaches 99.5% of a cap no scheme
+can beat. **That is the reverse of how the method is usually described.** The
+heavy-overlap, full-size resample is the case it is motivated by and the case
+in which it cannot help: two hundred twenty-bar windows laid over a
+219-bar span force a mean concurrency near eighteen whichever windows are
+chosen, so the binding constraint is arithmetic rather than algorithmic. Its
+*largest* gain of all is on non-overlapping point labels, where the overlap
+problem does not exist and the only redundancy left is duplicate draws — which
+is the clearest sign it is not solving the problem it is sold for.
+
+The remedy for heavy overlap is to draw fewer observations, and the effective
+sample size says how many. Drawing all `n` of them cleverly does not recover
+information that is not there.
+
+**The decay schedule runs on information, not on the calendar.** Weights are
+linear in cumulative uniqueness, so a stretch in which fifty overlapping
+observations say the same thing ages like the one week of information it is.
+Measured against the index-linear alternative: ten redundant observations
+carrying one observation's worth out of eleven — nine per cent of the
+information — get 7.8% of the weight on the information scale and 26.2% on the
+index scale.
+
+Two of this phase's own test claims were wrong and were corrected rather than
+loosened. The decay comparison first asserted that the newer half keeps more
+*total* weight under an information scale, which is false, since the schedule
+is normalised to end at one; the right measurement is the redundant pile's
+share. And the bootstrap gain was asserted to be monotone down to five draws on
+eight replications, where sixty show five and ten within each other's standard
+errors — the plateau is now a floor rather than an ordering.
+
+Two deliberate departures from `splits`. The labels have to be whole bar indices
+here: purging asks whether two intervals intersect, which is an ordering
+question that floats answer, and concurrency asks how much of a window is
+shared, which is a measure question — and on a continuum a point label, the
+common case where an observation is one bar, is a set of measure zero with no
+uniqueness at all. And the sortedness requirement is dropped, because nothing
+here is positional and insisting would mean sorting a bootstrap draw before it
+could be scored.
