@@ -17,6 +17,7 @@ from holdout import (
     mean_time_to_drawdown,
 )
 from holdout.exceptions import ValidationError
+from holdout.series import FloatArray
 
 
 def test_expected_drawdown_at_zero_drift_is_its_closed_form() -> None:
@@ -187,7 +188,7 @@ def test_the_exponential_reading_of_the_tail_is_wrong_and_by_how_much() -> None:
 
 def discrete_maximum_drawdowns(
     horizon: float, drift: float, vol: float, periods: int, draws: int, seed: int
-) -> np.ndarray:
+) -> FloatArray:
     """Maximum drawdowns of a random walk observed exactly ``periods`` times.
 
     No discretisation error in the *estimator*: the drawdown of a discretely
