@@ -379,3 +379,46 @@ def test_uniqueness_rejects_a_label_file_of_the_wrong_shape(tmp_path: Path) -> N
     path = tmp_path / "labels.csv"
     path.write_text("0,4,9\n5,9,14\n", encoding="utf-8")
     assert main(["uniqueness", "--labels", str(path)]) == 2
+
+
+def test_drawdown_reports_the_observed_depth_and_the_null(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "drawdown", str(sample / "trending.csv"), "--column", "ma5_40")
+    assert "peak-trough" in out and "1-in-20" in out and "percentile" in out
+    # The caveat has to be there when the null was fitted to the same returns.
+    assert "not a p-value" in out
+    assert "%" in out
+
+
+def test_drawdown_with_a_given_null_drops_the_caveat(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "drawdown",
+        str(sample / "sweep.csv"),
+        "--column",
+        "ma10_120",
+        "--drift",
+        "0.0",
+        "--volatility",
+        "0.01",
+    )
+    assert "not a p-value" not in out
+
+
+def test_drawdown_marks_a_record_still_under_water(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "drawdown", str(sample / "sweep.csv"))
+    # Thirty rules on a market with nothing to find: at least one of them has to
+    # end its record below its own high-water mark.
+    assert "+" in out
+
+
+def test_drawdown_covers_every_column_by_default(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "drawdown", str(sample / "trending.csv"))
+    assert out.count("ma") >= 10

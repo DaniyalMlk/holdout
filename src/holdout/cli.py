@@ -19,6 +19,7 @@ import numpy as np
 
 from . import __version__
 from .deflated import deflate_trials, minimum_track_record_length, probabilistic_sharpe_ratio
+from .drawdown import assess_drawdown
 from .exceptions import HoldoutError, ValidationError
 from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
@@ -64,6 +65,74 @@ def _years(periods: float, ppy: float) -> str:
     if not math.isfinite(periods):
         return "never"
     return f"{periods / ppy:.1f}y"
+
+
+def _cmd_drawdown(args: argparse.Namespace) -> int:
+    table = _load(args)
+    names = [args.column] if args.column else table.names
+    rows = []
+    for name in names:
+        got = assess_drawdown(table.column(name), drift=args.drift, volatility=args.volatility)
+        worst = got.observed
+        under = f"{worst.time_under_water}" + ("+" if worst.under_water_censored else "")
+        rows.append(
+            [
+                name,
+                f"{worst.proportional:.2%}",
+                f"{worst.peak_index}-{worst.trough_index}",
+                "never" if worst.recovery_index is None else str(worst.recovery_index),
+                under,
+                f"{-math.expm1(-got.expected):.2%}",
+                f"{-math.expm1(-got.limit):.2%}",
+                f"{got.percentile:.3f}",
+                f"{got.exceedance:.4f}",
+            ]
+        )
+    print(
+        _table(
+            rows,
+            [
+                "strategy",
+                "worst",
+                "peak-trough",
+                "recovery",
+                "under water",
+                "expected",
+                "1-in-20",
+                "percentile",
+                "p",
+            ],
+        )
+    )
+    print()
+    print(
+        "The drawdown is read as a fraction of the peak, on the reading that the "
+        "returns are logarithmic."
+    )
+    print(
+        "'expected' and '1-in-20' are what a Brownian motion with this record's own "
+        "drift and volatility"
+    )
+    print(
+        "would produce over a record this long. A percentile near one half is the "
+        "drawdown such a strategy"
+    )
+    print("has anyway; it is not evidence of anything having gone wrong.")
+    if any(
+        assess_drawdown(table.column(name), drift=args.drift, volatility=args.volatility).estimated
+        for name in names
+    ):
+        print()
+        print(
+            "The drift and volatility were estimated from the same returns, so 'p' is "
+            "not a p-value: it"
+        )
+        print(
+            "understates badly, by a factor of about thirteen at the 5% level on 252 "
+            "observations. Pass"
+        )
+        print("--drift and --volatility to get one that is.")
+    return 0
 
 
 def _cmd_sharpe(args: argparse.Namespace) -> int:
@@ -404,6 +473,25 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("file", help="returns CSV: one row per period, one column per strategy")
         p.add_argument("--no-index", action="store_true", help="the CSV has no label column")
         p.add_argument("--periods-per-year", type=float, default=252.0)
+
+    p = sub.add_parser(
+        "drawdown",
+        help="the worst drawdown beside what the null says to expect",
+        description=(
+            "Every other command here asks what a search was worth. This one asks "
+            "what one realised path owes to luck: the deepest drawdown of a "
+            "strategy with no edge at all is 1.2533 standard deviations of its "
+            "record's length, and with an edge it grows logarithmically rather "
+            "than away."
+        ),
+    )
+    with_file(p)
+    p.add_argument("--column", help="only this strategy")
+    p.add_argument("--drift", type=float, help="drift per period for the null (default: estimated)")
+    p.add_argument(
+        "--volatility", type=float, help="volatility per period for the null (default: estimated)"
+    )
+    p.set_defaults(func=_cmd_drawdown)
 
     p = sub.add_parser("sharpe", help="Sharpe ratio inference for each column")
     with_file(p)
