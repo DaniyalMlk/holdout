@@ -32,23 +32,28 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 from .exceptions import ValidationError
-from .series import FloatArray, as_returns
+from .series import FloatArray, as_returns, check_probability
 
 __all__ = [
     "MAX_MODES",
     "DrawdownSpectrum",
     "MaximumDrawdown",
     "drawdown_exceedance",
+    "drawdown_quantile",
     "drawdown_series",
     "drawdown_spectrum",
     "drawdown_survival",
     "equity_curve",
+    "expected_maximum_drawdown",
+    "final_drawdown_exceedance",
     "maximum_drawdown",
+    "mean_time_to_drawdown",
 ]
 
 MAX_MODES = 2048
@@ -515,7 +520,180 @@ def drawdown_exceedance(
     result below about ``1e-13`` is therefore a number with no significant
     digits in it, and no rearrangement of this series fixes that — the
     term-by-term complement converges only conditionally, like an alternating
-    harmonic series. Use :func:`drawdown_tail` there, which is asymptotic rather
-    than exact but has the right shape.
+    harmonic series. Use :func:`final_drawdown_exceedance`
+    there: the chance of *ending* the horizon that far down is a closed form, a
+    rigorous lower bound on this, and accurate past 1e-300.
     """
     return 1.0 - drawdown_survival(level, horizon, drift, volatility)
+
+
+def mean_time_to_drawdown(level: float, drift: float, volatility: float) -> float:
+    """Expected time until the drawdown first reaches ``level``.
+
+    Closed form, and not an integral of the law above: the same ordinary
+    differential equation that the eigenproblem comes from can be solved once
+    for the expected passage time directly, giving
+    ``level / nu + (sigma**2 / (2 nu**2)) (exp(-2 nu level / sigma**2) - 1)``
+    with ``nu = -drift``. At zero drift it reduces to ``level**2 / sigma**2``.
+
+    The two routes agree to nine figures on a grid of parameters, which is the
+    cheapest independent check there is on the expansion's coefficients and
+    rates together.
+
+    For a strategy that makes money the answer grows exponentially in the level:
+    a 20% drawdown arrives eventually and a 60% one effectively never, and the
+    ratio between the two is not three.
+    """
+    if not math.isfinite(level) or level <= 0.0:
+        raise ValidationError(f"level must be positive and finite, got {level}")
+    if not math.isfinite(volatility) or volatility <= 0.0:
+        raise ValidationError(f"volatility must be positive and finite, got {volatility}")
+    if not math.isfinite(drift):
+        raise ValidationError(f"drift must be finite, got {drift}")
+    nu = -drift
+    if nu == 0.0:
+        return level * level / volatility**2
+    return level / nu + (volatility**2 / (2.0 * nu * nu)) * math.expm1(
+        -2.0 * nu * level / volatility**2
+    )
+
+
+def final_drawdown_exceedance(
+    level: float, horizon: float, drift: float, volatility: float
+) -> float:
+    """``P(drawdown at the end of the horizon >= level)``, in closed form.
+
+    The drawdown *at a single time* is a reflected Brownian motion's marginal,
+    which is elementary where the law of its running maximum is not::
+
+        P(D_T >= h) = Phi(-(h + mu T) / (sigma sqrt(T)))
+                      + exp(-2 mu h / sigma**2) Phi((mu T - h) / (sigma sqrt(T)))
+
+    Two reasons this is here rather than in a footnote.
+
+    It is a rigorous lower bound on :func:`drawdown_exceedance`, since a record
+    that *ends* ``level`` down has been ``level`` down. That makes it a check on
+    the expansion that no self-consistent error inside the expansion can pass,
+    and a test applies it across a grid.
+
+    And it keeps working where the expansion runs out of digits. The exceedance
+    of the maximum is the complement of a survival probability just under one,
+    so it has nothing left below about ``1e-13``; this goes through ``erfc`` and
+    stays accurate past ``1e-300``.
+
+    What it is not is an asymptote for the maximum. The two tails this law has
+    are different and it is worth being explicit about which is which: at a
+    fixed level and a growing horizon the exceedance approaches one
+    exponentially at rate ``2 drift / sigma**2``, the stationary exceedance rate
+    of the reflected process, while at a fixed horizon and a growing level it
+    dies like ``exp(-(level + drift * horizon)**2 / (2 sigma**2 horizon))``,
+    which is Gaussian. Reading the first as though it governed the second — by
+    taking the first passage to be exponential with the mean this module also
+    computes — overstates a one-year 60% drawdown at a 0.67 Sharpe ratio by a
+    factor of 520, and the error grows as the level deepens.
+    """
+    check_parameters(horizon, volatility)
+    if not math.isfinite(level) or level <= 0.0:
+        raise ValidationError(f"level must be positive and finite, got {level}")
+    if not math.isfinite(drift):
+        raise ValidationError(f"drift must be finite, got {drift}")
+    scale = volatility * math.sqrt(horizon)
+    drifted = drift * horizon
+    first = _normal_cdf(-(level + drifted) / scale)
+    second = _normal_cdf((drifted - level) / scale)
+    if second == 0.0:
+        return first
+    log_second = math.log(second) - 2.0 * drift * level / volatility**2
+    return first + (math.exp(log_second) if log_second > -745.0 else 0.0)
+
+
+def _normal_cdf(x: float) -> float:
+    """Standard normal distribution function, through ``erfc`` so the tail survives.
+
+    ``NormalDist().cdf`` is fine in the body of the distribution and underflows
+    to exactly zero around eight standard deviations out, which is inside the
+    range this module asks about.
+    """
+    return 0.5 * math.erfc(-x / math.sqrt(2.0))
+
+
+_PANELS = 24
+_NODES, _WEIGHTS = np.polynomial.legendre.leggauss(12)
+
+
+def _tail_ceiling(horizon: float, drift: float, volatility: float) -> float:
+    """A level the drawdown reaches with probability under ``1e-15``.
+
+    Doubling outward from the scale of the problem rather than guessing a fixed
+    number of standard deviations, because a losing strategy's drawdown is
+    centred on ``-drift * horizon`` and a fixed multiple of ``sigma sqrt(T)``
+    either truncates the integral or walks into the conditioning limit for no
+    reason.
+    """
+    scale = volatility * math.sqrt(horizon)
+    level = max(2.0 * scale, 2.0 * max(0.0, -drift) * horizon)
+    for _ in range(60):
+        if drawdown_exceedance(level, horizon, drift, volatility) < 1e-15:
+            return level
+        level *= 2.0
+    raise ValidationError(  # pragma: no cover - unreachable for finite parameters
+        f"no level within {level:g} is out of reach of this path"
+    )
+
+
+def expected_maximum_drawdown(horizon: float, drift: float, volatility: float) -> float:
+    """``E[MDD(horizon)]``, by integrating the exceedance over every level.
+
+    ``E[X] = integral of P(X > h) dh`` for a non-negative ``X``, and the
+    exceedance is smooth in the level — flat at one near zero, with a tail that
+    dies faster than exponentially — so composite Gauss-Legendre over a ceiling
+    chosen from the tail itself reaches the closed form at zero drift,
+    ``sigma sqrt(pi T / 2)``, to eleven figures.
+
+    The number this returns is the one worth knowing before a drawdown
+    happens. At zero drift it is 1.2533 standard deviations of the horizon, so a
+    strategy with no edge at 15% volatility expects an 18.8% worst drawdown in
+    its first year *for that reason alone*. With an edge the growth in the
+    horizon is logarithmic rather than square-root, approaching
+    ``sigma**2 / (2 drift)`` per doubling.
+    """
+    check_parameters(horizon, volatility)
+    if not math.isfinite(drift):
+        raise ValidationError(f"drift must be finite, got {drift}")
+    ceiling = _tail_ceiling(horizon, drift, volatility)
+    edges = np.linspace(0.0, ceiling, _PANELS + 1)
+    total = 0.0
+    for left, right in pairwise(edges):
+        half = 0.5 * (right - left)
+        centre = 0.5 * (right + left)
+        for node, weight in zip(_NODES, _WEIGHTS, strict=True):
+            level = centre + half * node
+            total += half * weight * drawdown_exceedance(level, horizon, drift, volatility)
+    return total
+
+
+def drawdown_quantile(probability: float, horizon: float, drift: float, volatility: float) -> float:
+    """The level the maximum drawdown stays below with probability ``probability``.
+
+    This is the calibrated version of a drawdown limit. A limit set at a round
+    number is a limit on nothing in particular; this one answers "how deep does
+    this strategy go one year in twenty, if its drift and volatility are what we
+    think they are", and the answer is usually deeper than people guess.
+
+    The exceedance is strictly decreasing in the level, so the inversion is a
+    bisection on a bracket found by doubling.
+    """
+    check_parameters(horizon, volatility)
+    check_probability(probability, "probability")
+    ceiling = _tail_ceiling(horizon, drift, volatility)
+    target = 1.0 - probability
+    low, high = 0.0, ceiling
+    for _ in range(200):
+        mid = 0.5 * (low + high)
+        if mid <= low or mid >= high:
+            break
+        if drawdown_exceedance(mid, horizon, drift, volatility) > target:
+            low = mid
+        else:
+            high = mid
+    return 0.5 * (low + high)
