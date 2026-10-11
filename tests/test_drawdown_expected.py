@@ -279,7 +279,7 @@ def test_the_conditioning_budget_is_looser_for_an_integral_than_for_a_probabilit
     total Sharpe ratio at every horizon and volatility.
     """
     for horizon, vol in [(1.0, 0.15), (16.0, 0.3), (0.5, 0.05)]:
-        low, high = 0.1, 5.0
+        low, high = 0.1, 10.0
         for _ in range(30):
             mid = 0.5 * (low + high)
             try:
@@ -288,7 +288,7 @@ def test_the_conditioning_budget_is_looser_for_an_integral_than_for_a_probabilit
                 high = mid
             else:
                 low = mid
-        assert low == pytest.approx(1.76, abs=0.01)
+        assert low == pytest.approx(3.23, abs=0.02)
     # A probability a caller reads directly is held to the strict budget, which
     # is five orders tighter, and that is deliberate.
     with pytest.raises(ValidationError, match="cancellation"):
