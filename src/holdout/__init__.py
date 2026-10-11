@@ -17,6 +17,12 @@ from .deflated import (
     minimum_track_record_length,
     probabilistic_sharpe_ratio,
 )
+from .drawdown import (
+    MaximumDrawdown,
+    drawdown_series,
+    equity_curve,
+    maximum_drawdown,
+)
 from .exceptions import HoldoutError, InsufficientDataError, ValidationError
 from .mcs import Elimination, ModelConfidenceSet, Statistic, model_confidence_set
 from .moments import Moments, autocorrelation, kurtosis, moments, skewness
@@ -98,6 +104,7 @@ __all__ = [
     "HoldoutError",
     "InsufficientDataError",
     "LeakageError",
+    "MaximumDrawdown",
     "ModelConfidenceSet",
     "Moments",
     "PBOResult",
@@ -126,9 +133,11 @@ __all__ = [
     "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
+    "drawdown_series",
     "drawn_uniqueness",
     "effective_number_of_trials",
     "effective_sample_size",
+    "equity_curve",
     "estimate_sharpe",
     "expected_maximum_normal",
     "expected_maximum_sharpe",
@@ -137,6 +146,7 @@ __all__ = [
     "kfold",
     "kurtosis",
     "leakage_audit",
+    "maximum_drawdown",
     "minimum_sharpe",
     "minimum_t_statistic",
     "minimum_track_record_length",
