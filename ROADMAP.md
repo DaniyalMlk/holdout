@@ -310,3 +310,77 @@ common case where an observation is one bar, is a set of measure zero with no
 uniqueness at all. And the sortedness requirement is dropped, because nothing
 here is positional and insisting would mean sorting a bootstrap draw before it
 could be scored.
+
+## Phase 13 — The drawdown a track record owes to luck
+
+- [x] The observed statistics: running drawdown, depth, peak, trough, recovery,
+      and the longest stretch under water, with censoring marked
+- [x] The exact law of the maximum drawdown of a drifted Brownian motion, from
+      the first-passage eigenproblem of the reflected process, every root
+      bracketed in advance
+- [x] The lowest eigenfunction changes family at `drift * level == variance
+      rate`, and the degenerate case at the threshold itself
+- [x] The expected maximum drawdown by tail integration, against its closed form
+      at zero drift
+- [x] Calibrated drawdown limits by inversion, and the exact mean time to a
+      given depth
+- [x] The exact law of the drawdown at the end of the horizon, as a rigorous
+      lower bound and as the only thing that resolves in the deep tail
+- [x] Validation against a reflection series, a closed-form Laplace transform at
+      every drift, and the coefficients by quadrature
+- [x] The domain where the expansion is well conditioned, measured and enforced
+- [x] The gap between a drawdown read off daily marks and the path's own,
+      measured, and the size distortion it causes
+- [x] A `drawdown` command that says what an estimated null is and is not worth
+
+### What the law says that a round-number drawdown limit does not
+
+A strategy with no edge at all, at 15% annual volatility, expects a 17.1% worst
+drawdown in its first year and 44.8% over ten, and exceeds 65.5% one decade in
+twenty. So "is this drawdown too deep" has no answer that does not mention the
+volatility and the length of the record.
+
+With an edge the growth changes character rather than merely slowing: the
+expected depth rises like the square root of the horizon at zero drift and
+logarithmically once there is a drift, approaching `sigma^2 / (2 mu)` per
+doubling. A limit scaled to the length of a track record is therefore scaled to
+the wrong thing. Seen from the other side the same fact is starker: at a 1.0
+Sharpe ratio a 20% fall arrives after 7.8 years on average and a 40% fall after
+450.
+
+### Two numerical points that decided the shape of the code
+
+The rate of the lowest mode is a difference of squares whose halves agree to the
+last bit when the drift is strong. Solving for the *gap* instead, through the
+closed form the root condition supplies, keeps it exact: at a drift of 0.5
+against a level of 2 the direct subtraction gives exactly zero where the rate is
+2.5e-21.
+
+And the first mode's root approaches zero as the drift approaches the family
+threshold, where the coefficient's denominator `theta - sin(theta) cos(theta)`
+is a difference of two numbers that agree to the last bit while the true value
+is `2/3 theta**3`. Subtracted directly, one parameter set on a grid of drifts
+returned a survival probability above one. The series is the fix, and it also
+explains why the root being poorly determined there does no harm: both halves of
+the coefficient are proportional to `theta**3`, so the ratio does not care.
+
+### The asymptote that was wrong, and how it announced itself
+
+The deep tail was first written as an exponential first passage with the exact
+mean this module also computes, which is the natural reading of "a drawdown this
+deep arrives once every `E[tau]` years". Against the exact law it reads 3.0
+times the truth at a 30% level, 10.6 at 40%, 59.9 at 50% and 521.7 at 60%. An
+error that *grows* as the level deepens is a wrong exponent, not a loose
+constant, and the diagnosis is that the two tails of this law are different
+things: exponential at rate `2 mu / sigma^2` in the horizon, Gaussian in the
+level. What is exposed in its place is exact.
+
+### The honest limits
+
+The exceedance below about 1e-13 is the complement of a survival probability of
+one and has no digits in it. The expansion is a cancellation for a losing
+strategy, with the largest coefficient growing like `0.76 exp(beta) / beta`, so
+the domain is enforced rather than hoped for. And the exceedance an estimated
+null reports is not a p-value: a nominal 5% test rejects 3.4% of the time from
+discrete monitoring alone and 0.27% once the drift and volatility are estimated
+from the same path.

@@ -682,6 +682,126 @@ worth one observation out of eleven get 7.8% of the weight on that scale against
 holdout uniqueness --count 200 --window 20
 ```
 
+## The drawdown a track record owes to luck
+
+Every other statistic here asks what a *search* was worth. This one asks what
+one realised path owes to chance: a track record's worst drawdown is the number
+that ends a mandate, and it is also a number a strategy with a real edge
+produces routinely.
+
+The drawdown of a Brownian motion is that motion reflected at its own running
+peak, so the chance of never falling `h` below a high-water mark is the survival
+function of a first passage with a reflecting boundary at zero and an absorbing
+one at `h`. The backward equation separates, and the eigenvalues are the roots
+of `k cos(kh) + b sin(kh) = 0` with `b = -mu / sigma^2` — one in each branch of
+the tangent, so every root is bracketed before it is solved for.
+
+```python
+from holdout import assess_drawdown, drawdown_quantile, expected_maximum_drawdown
+
+expected_maximum_drawdown(horizon=252.0, drift=0.0, volatility=0.15 / 252**0.5)
+# 0.1879...  -- a 17.1% fall, from a strategy with no edge whatsoever
+drawdown_quantile(0.95, horizon=252.0, drift=0.0, volatility=0.15 / 252**0.5)
+# 0.3362...  -- the one-year-in-twenty depth for the same non-strategy
+```
+
+```bash
+holdout drawdown sample/trending.csv --column ma5_40
+```
+
+### What a drawdown is worth knowing before it happens
+
+At 15% annual volatility, the expected worst drawdown and the depth exceeded one
+record in twenty, as a fraction of the peak:
+
+| Sharpe | 1 year | 3 years | 10 years |
+| --- | --- | --- | --- |
+| 0.0 | 17.1% / 28.6% | 27.8% / 44.1% | 44.8% / 65.5% |
+| 0.5 | 14.8% / 24.8% | 22.1% / 35.4% | 31.5% / 47.3% |
+| 1.0 | 13.0% / 21.5% | 18.2% / 28.5% | 24.3% / 35.4% |
+| 1.5 | 11.5% / 18.7% | 15.5% / 23.7% | 20.0% / 28.5% |
+
+Two things are worth reading off it. Without an edge the drawdown grows like the
+square root of the horizon and without bound; with one it grows logarithmically,
+approaching `sigma^2 / (2 mu)` per doubling, so a drawdown limit scaled to the
+length of a track record is scaled to the wrong thing. And the first row is the
+answer to "is 28% too much": for a strategy with no edge, a year in twenty, no.
+
+The waiting time is exponential in the depth, which is the same fact seen from
+the other side. At a 1.0 Sharpe ratio and 15% volatility a 20% fall takes 7.8
+years to arrive on average and a 40% fall takes 450.
+
+### Three routes to the same law, and two that stop short
+
+The expansion is checked against references that share no derivation with it.
+
+- **The driftless case has a reflection series.** Lévy's theorem makes the
+  drawdown of a driftless Brownian motion a reflected Brownian motion, whose
+  maximum is distributed as the maximum absolute value of the original, and that
+  has a classical image series in the normal distribution function. The two
+  agree to 2e-16 over a grid.
+- **The first passage has a closed-form Laplace transform at every drift**, from
+  the same differential equation solved once rather than separated. Matching it
+  at several arguments tests the eigenvalues and the coefficients jointly; the
+  worst disagreement over 225 parameter sets is 3e-10 relative to the size of
+  the coefficients, and most are at 1e-11.
+- **The coefficients are inner products** and can be read off by quadrature
+  against the speed measure. They agree to 1e-15.
+- **The expected drawdown has one closed form**, `sigma sqrt(pi T / 2)` at zero
+  drift, which the tail integral reproduces to thirteen figures.
+
+Two things do not work and are reported rather than papered over.
+
+The exceedance is one less a survival probability, and for a level the path will
+almost certainly not reach that is a cancellation: below about `1e-13` the
+answer has no significant digits, and no rearrangement of the series fixes it,
+because the term-by-term complement converges only conditionally. What is
+exposed instead is `final_drawdown_exceedance`, the exact law of the drawdown at
+the *end* of the horizon — a rigorous lower bound on the maximum's, running at
+0.36 to 0.45 of it, and accurate past `1e-300`.
+
+And the obvious asymptote for that tail is wrong. Treating the first passage as
+exponential with its own exact mean — the natural reading of "a drawdown this
+deep arrives once every `E[tau]` years" — overstates a one-year 60% drawdown at
+a 0.67 Sharpe ratio by a factor of 520, and the error *grows* as the level
+deepens, which is the shape of a wrong exponent rather than a loose constant.
+The two tails are different: exponential at rate `2 mu / sigma^2` in the
+horizon, Gaussian in the level.
+
+### Where the expansion is well conditioned, stated rather than assumed
+
+The coefficients carry `exp(-mu h / sigma^2)`, which exceeds one only for a
+*losing* strategy. There the survival probability is a cancellation of terms far
+larger than the answer: the largest coefficient grows like
+`0.76 exp(beta) / beta` in `beta = -mu h / sigma^2`, measured, and the absolute
+error is about `eps` times that. So the domain is a property of the method and
+is enforced with an error that names the reason. Nothing at or above zero drift
+is affected.
+
+The budget is deliberately split. A probability a caller reads directly is held
+to an absolute error near `1e-9`; the expected drawdown and the quantiles are an
+integral and an inversion, whose error budgets absorb five orders more, and
+spending that carries the losing-side domain out to a total Sharpe ratio of
+-3.23.
+
+### Daily marks see less of the path than the path contains
+
+A drawdown read off 252 daily observations is smaller than the drawdown of the
+path underneath them — 7% smaller in the mean, falling to 1.4% at sixteen times
+the frequency, with the shortfall dying like one over the square root of the
+count. That is not an error in the estimate: the discretely observed drawdown is
+a different contract, and it is the one a track record reports.
+
+It does mean a test against the continuous law is conservative, and by how much
+is worth a number. On simulated records of 252 observations with the drift and
+volatility *known*, a nominal 5% test rejects 3.4% of the time. Estimating those
+two parameters from the same record takes the same test to 0.27% — a further
+factor of thirteen, and much the larger effect, because a path that fell a long
+way also reports a larger volatility and so makes its own drawdown look
+ordinary. Both effects are one-sided, so `assess_drawdown` carries a flag saying
+which case it is, and the command line says in words that an estimated null does
+not give a p-value.
+
 ## Layout
 
 | Module | Contents |
@@ -699,4 +819,5 @@ holdout uniqueness --count 200 --window 20
 | `spa` | Reality Check, SPA, Romano–Wolf |
 | `mcs` | model confidence set, both statistics |
 | `pairwise` | difference of two Sharpe ratios, Memmel and Ledoit–Wolf variances, Newey–West |
+| `drawdown` | drawdown statistics, the exact maximum-drawdown law, calibrated limits |
 | `io`, `synthetic`, `cli` | CSV input, the sample sweeps, the `holdout` command |
