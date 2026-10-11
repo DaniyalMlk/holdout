@@ -18,8 +18,13 @@ from .deflated import (
     probabilistic_sharpe_ratio,
 )
 from .drawdown import (
+    MAX_MODES,
+    DrawdownSpectrum,
     MaximumDrawdown,
+    drawdown_exceedance,
     drawdown_series,
+    drawdown_spectrum,
+    drawdown_survival,
     equity_curve,
     maximum_drawdown,
 )
@@ -94,11 +99,13 @@ __version__ = "0.1.0"
 
 __all__ = [
     "DEFAULT_TRIM",
+    "MAX_MODES",
     "BreakStatistics",
     "ColumnMeans",
     "CombinatorialPurgedCV",
     "Concurrency",
     "DeflatedSharpe",
+    "DrawdownSpectrum",
     "Elimination",
     "Haircut",
     "HoldoutError",
@@ -133,7 +140,10 @@ __all__ = [
     "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
+    "drawdown_exceedance",
     "drawdown_series",
+    "drawdown_spectrum",
+    "drawdown_survival",
     "drawn_uniqueness",
     "effective_number_of_trials",
     "effective_sample_size",
