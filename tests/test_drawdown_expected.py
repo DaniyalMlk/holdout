@@ -270,3 +270,27 @@ def test_derived_quantities_refuse_bad_arguments() -> None:
         mean_time_to_drawdown(-1.0, 0.0, 0.15)
     with pytest.raises(ValidationError):
         final_drawdown_exceedance(0.1, 1.0, 0.0, 0.0)
+
+
+def test_the_conditioning_budget_is_looser_for_an_integral_than_for_a_probability() -> None:
+    """And the slack is what the domain on the losing side is bought with.
+
+    The boundary is a property of the dimensionless groups, so it is the same
+    total Sharpe ratio at every horizon and volatility.
+    """
+    for horizon, vol in [(1.0, 0.15), (16.0, 0.3), (0.5, 0.05)]:
+        low, high = 0.1, 5.0
+        for _ in range(30):
+            mid = 0.5 * (low + high)
+            try:
+                expected_maximum_drawdown(horizon, -mid * vol / math.sqrt(horizon), vol)
+            except ValidationError:
+                high = mid
+            else:
+                low = mid
+        assert low == pytest.approx(1.76, abs=0.01)
+    # A probability a caller reads directly is held to the strict budget, which
+    # is five orders tighter, and that is deliberate.
+    with pytest.raises(ValidationError, match="cancellation"):
+        drawdown_survival(2.0, 4.0, -0.3, 0.15)
+    assert 0.0 < drawdown_survival(2.0, 4.0, -0.3, 0.15, max_conditioning=1e12) <= 1.0

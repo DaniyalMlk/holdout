@@ -19,8 +19,10 @@ from .deflated import (
 )
 from .drawdown import (
     MAX_MODES,
+    DrawdownAssessment,
     DrawdownSpectrum,
     MaximumDrawdown,
+    assess_drawdown,
     drawdown_exceedance,
     drawdown_quantile,
     drawdown_series,
@@ -109,6 +111,7 @@ __all__ = [
     "CombinatorialPurgedCV",
     "Concurrency",
     "DeflatedSharpe",
+    "DrawdownAssessment",
     "DrawdownSpectrum",
     "Elimination",
     "Haircut",
@@ -134,6 +137,7 @@ __all__ = [
     "adjust_pvalues",
     "as_matrix",
     "as_returns",
+    "assess_drawdown",
     "autocorrelation",
     "autocorrelation_adjusted_sharpe",
     "average_uniqueness",

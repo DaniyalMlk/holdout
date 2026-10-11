@@ -42,8 +42,10 @@ from .series import FloatArray, as_returns, check_probability
 
 __all__ = [
     "MAX_MODES",
+    "DrawdownAssessment",
     "DrawdownSpectrum",
     "MaximumDrawdown",
+    "assess_drawdown",
     "drawdown_exceedance",
     "drawdown_quantile",
     "drawdown_series",
@@ -67,6 +69,23 @@ rather than summing thousands of terms to confirm it.
 """
 
 _Scalar = Callable[[float], float]
+
+_INTEGRAL_CONDITIONING = 1e12
+"""A looser budget, used only where the output is an integral or an inversion.
+
+:func:`drawdown_survival` is a probability a caller reads directly, so it is
+held to an absolute error near ``1e-9``. :func:`expected_maximum_drawdown` and
+:func:`drawdown_quantile` are not: the first averages the exceedance over every
+level, where a ``1e-4`` error in the part of the tail that contributes nothing
+is worth ``1e-4`` times a tail's width, and the second is looking for the level
+at which the exceedance crosses something like ``0.05``. Spending that slack
+buys domain — a losing strategy's conditioning grows like
+``exp(13 total_sharpe)`` at the level where the tail is cut, so the five orders
+of magnitude move the boundary from a total Sharpe ratio of -1.09 to -1.76. Both
+figures are measured, and both are properties of the dimensionless groups
+rather than of the horizon: the boundary sits at -1.76 for every volatility and
+every horizon tried.
+"""
 
 _EXPANSION_CONDITIONING = 1e7
 """Largest coefficient magnitude the expansion is summed at.
@@ -263,21 +282,69 @@ def _ground_mode(beta: float) -> tuple[float, float]:
     return rate, shape * math.exp(-gap)
 
 
-def _trig_bracket(beta: float, n: int) -> tuple[float, float]:
-    """The interval containing the ``n``-th trigonometric root, counting from one.
+def _trig_roots(beta: float, count: int) -> FloatArray:
+    """The first ``count`` roots of ``theta cos(theta) + beta sin(theta) == 0``.
 
-    The roots are the solutions of ``theta cos(theta) + beta sin(theta) == 0``.
-    For ``beta > 0`` there is exactly one in each ``((n - 1/2) pi, n pi)``. For
-    ``beta < 0`` the equation is ``tan(theta) == theta / A``, whose roots sit in
-    ``(n pi, (n + 1/2) pi)``; the branch ``(0, pi/2)`` holds one as well, but
-    only while ``A < 1``, which is exactly when there is no hyperbolic ground
-    mode to take its place. A grid audit of the sign changes confirms the count
-    on both sides of that threshold.
+    Each root is in a bracket known in advance -- for ``beta > 0`` one in each
+    ``((n - 1/2) pi, n pi)``, and for ``beta < 0`` one in each
+    ``(n pi, (n + 1/2) pi)`` plus one in ``(0, pi/2)`` while ``-beta < 1``, which
+    is exactly when there is no hyperbolic ground mode to take its place. A grid
+    audit of the sign changes confirms the count on both sides of that
+    threshold.
+
+    Writing the root *inside* its bracket turns the equation into a contraction
+    and removes the search. With ``theta = (n - 1/2) pi + delta`` the equation
+    for a positive ``beta`` is ``cot(delta) == theta / beta``, so
+    ``theta = (n - 1/2) pi + atan(beta / theta)``; for a negative ``beta`` and
+    ``theta = n pi + delta`` it is ``theta = n pi + atan(theta / A)``. Both
+    iterations contract by at most ``1 / (2 theta)``, so thirty-odd sweeps reach
+    the last bit for every mode at once -- against fifty-two bisections per
+    mode, one mode at a time, which was the whole cost of the law.
+
+    The one root the iteration cannot have is the small one in ``(0, pi/2)``:
+    there the map's derivative at the origin is ``1 / A > 1``, so it pushes away
+    from the root rather than towards it. That single root is bisected.
     """
-    if beta > 0.0:
-        return (n - 0.5) * math.pi, n * math.pi
-    index = n if -beta >= 1.0 else n - 1
-    return index * math.pi, (index + 0.5) * math.pi
+    if beta == 0.0:
+        exact: FloatArray = (np.arange(1, count + 1, dtype=np.float64) - 0.5) * math.pi
+        return exact
+    roots = np.empty(count, dtype=np.float64)
+    small = beta < 0.0 and -beta < 1.0
+    if small:
+        # Repelling fixed point: bisect the one root in (0, pi / 2).
+        roots[0] = _bisect(
+            lambda th: th * math.cos(th) + beta * math.sin(th),
+            1e-300,
+            0.5 * math.pi * (1.0 - 1e-15),
+        )
+        remaining = count - 1
+        offsets = np.arange(1, remaining + 1, dtype=np.float64) * math.pi
+    elif beta > 0.0:
+        remaining = count
+        offsets = (np.arange(1, count + 1, dtype=np.float64) - 0.5) * math.pi
+    else:
+        remaining = count
+        offsets = np.arange(1, count + 1, dtype=np.float64) * math.pi
+    if remaining > 0:
+        theta = offsets + 0.25 * math.pi
+        shift = beta if beta > 0.0 else -1.0 / beta
+        for _ in range(8):
+            # Newton on theta - offset - atan(shift / theta) for a positive beta,
+            # and on theta - offset - atan(shift * theta) for a negative one. The
+            # map is a contraction either way, so Newton from the middle of the
+            # bracket converges quadratically and eight sweeps are past the last
+            # bit; iterating the map itself needs eighty, and at thirty modes a
+            # sweep is all numpy overhead.
+            if beta > 0.0:
+                residual = theta - offsets - np.arctan(shift / theta)
+                slope = 1.0 + shift / (theta * theta + shift * shift)
+            else:
+                scaled = shift * theta
+                residual = theta - offsets - np.arctan(scaled)
+                slope = 1.0 - shift / (1.0 + scaled * scaled)
+            theta = theta - residual / slope
+        roots[count - remaining :] = theta
+    return roots
 
 
 def _theta_less_half_sin_two(theta: float) -> float:
@@ -345,6 +412,7 @@ def drawdown_spectrum(
     volatility: float,
     *,
     modes: int = 64,
+    max_conditioning: float = _EXPANSION_CONDITIONING,
 ) -> DrawdownSpectrum:
     """Solve the first-passage eigenproblem for a drawdown of ``level``.
 
@@ -393,23 +461,20 @@ def drawdown_spectrum(
         weights.append(weight)
     has_ground = bool(rates)
 
-    exp_beta = math.exp(beta)
-    for n in range(1, count + 1):
-        if beta == 0.0:
-            theta = (n - 0.5) * math.pi
-        else:
-            lo, hi = _trig_bracket(beta, n)
-            span = hi - lo
-            left = lo + span * 1e-18 if lo > 0.0 else 1e-300
-            right = hi - span * 1e-15
-            theta = _bisect(lambda th: th * math.cos(th) + beta * math.sin(th), left, right)
-        sine = math.sin(theta)
-        rates.append((beta * beta + theta * theta) * scale)
-        weights.append(2.0 * exp_beta * sine**3 / _theta_less_half_sin_two(theta))
+    roots = _trig_roots(beta, count)
+    sine = np.sin(roots)
+    # theta - sin(theta) cos(theta), vectorised, with the series substituted for
+    # the small roots -- there is at most one, and that is where subtracting
+    # loses everything.
+    denominator = roots - 0.5 * np.sin(2.0 * roots)
+    for index in np.nonzero(roots <= 1.0)[0]:
+        denominator[index] = _theta_less_half_sin_two(float(roots[index]))
+    rates.extend(((beta * beta + roots * roots) * scale).tolist())
+    weights.extend((2.0 * math.exp(beta) * sine**3 / denominator).tolist())
 
     weight_array = np.asarray(weights, dtype=np.float64)
     conditioning = float(np.abs(weight_array).max())
-    if conditioning > _EXPANSION_CONDITIONING:
+    if conditioning > max_conditioning:
         raise ValidationError(
             f"the expansion is a cancellation at these parameters: the largest "
             f"coefficient is {conditioning:.3g}, so the survival probability would "
@@ -451,6 +516,8 @@ def drawdown_survival(
     horizon: float,
     drift: float,
     volatility: float,
+    *,
+    max_conditioning: float = _EXPANSION_CONDITIONING,
 ) -> float:
     """``P(MDD(horizon) < level)`` for a Brownian motion with these parameters.
 
@@ -492,7 +559,9 @@ def drawdown_survival(
             f"the level {level:g} needs {needed} eigenmodes at a dimensionless time of "
             f"{tau:.3g}, past the {MAX_MODES} this expansion will sum"
         )
-    raw = drawdown_spectrum(level, drift, volatility, modes=needed).survival(horizon)
+    raw = drawdown_spectrum(
+        level, drift, volatility, modes=needed, max_conditioning=max_conditioning
+    ).survival(horizon)
     # The modes sum to one and the horizon damps them, so the sum *is* a
     # probability -- but it is a sum of up to a couple of thousand terms, and
     # round-off puts it a few ulps outside [0, 1] whenever the answer is at
@@ -507,6 +576,8 @@ def drawdown_exceedance(
     horizon: float,
     drift: float,
     volatility: float,
+    *,
+    max_conditioning: float = _EXPANSION_CONDITIONING,
 ) -> float:
     """``P(MDD(horizon) >= level)``: the chance of a drawdown at least this deep.
 
@@ -524,7 +595,9 @@ def drawdown_exceedance(
     there: the chance of *ending* the horizon that far down is a closed form, a
     rigorous lower bound on this, and accurate past 1e-300.
     """
-    return 1.0 - drawdown_survival(level, horizon, drift, volatility)
+    return 1.0 - drawdown_survival(
+        level, horizon, drift, volatility, max_conditioning=max_conditioning
+    )
 
 
 def mean_time_to_drawdown(level: float, drift: float, volatility: float) -> float:
@@ -617,28 +690,120 @@ def _normal_cdf(x: float) -> float:
     return 0.5 * math.erfc(-x / math.sqrt(2.0))
 
 
-_PANELS = 24
+_PANELS = 48
 _NODES, _WEIGHTS = np.polynomial.legendre.leggauss(12)
 
 
-def _tail_ceiling(horizon: float, drift: float, volatility: float) -> float:
-    """A level the drawdown reaches with probability under ``1e-15``.
+def _crossing_exceedance(barrier: float, horizon: float, drift: float, volatility: float) -> float:
+    """``P(the path reaches +barrier at some point in the horizon)``, in closed form.
 
-    Doubling outward from the scale of the problem rather than guessing a fixed
-    number of standard deviations, because a losing strategy's drawdown is
-    centred on ``-drift * horizon`` and a fixed multiple of ``sigma sqrt(T)``
-    either truncates the integral or walks into the conditioning limit for no
-    reason.
+    The classical first-passage result for a Brownian motion with drift, with
+    the exponential folded into a logarithm so that a positive drift against a
+    distant barrier does not multiply an overflow by an underflow.
     """
     scale = volatility * math.sqrt(horizon)
-    level = max(2.0 * scale, 2.0 * max(0.0, -drift) * horizon)
-    for _ in range(60):
-        if drawdown_exceedance(level, horizon, drift, volatility) < 1e-15:
+    drifted = drift * horizon
+    first = _normal_cdf((drifted - barrier) / scale)
+    second = _normal_cdf(-(barrier + drifted) / scale)
+    if second == 0.0:
+        return first
+    log_second = math.log(second) + 2.0 * drift * barrier / volatility**2
+    return min(1.0, first + (math.exp(log_second) if log_second > -745.0 else 0.0))
+
+
+def _range_bound(level: float, horizon: float, drift: float, volatility: float) -> float:
+    """A rigorous upper bound on ``P(MDD >= level)`` that does not use the expansion.
+
+    A drawdown of ``level`` needs the path's whole range to be at least
+    ``level``, and a range of ``level`` needs the path to reach ``a`` above its
+    start or ``level - a`` below it, for any split ``a``. Splitting at
+    ``drift * horizon + level / 2`` balances the two exponents, which puts the
+    bound's exponent at ``level**2 / (8 sigma**2 horizon)`` — a factor of four
+    short of the true one, so the bound is loose by a factor of two *in the
+    level*. That is fine for its job, which is to say where the tail of an
+    integral can be cut.
+
+    The point of having it is that the expansion cannot do this. Out in the tail
+    the exceedance is the complement of a survival probability of one, so what
+    comes back is round-off; a ceiling chosen by waiting for *that* to fall
+    below a threshold never stops, and walks the level outwards until the
+    coefficients overflow their conditioning. This is in closed form and is
+    monotone.
+    """
+    split = min(max(drift * horizon + 0.5 * level, 0.01 * level), 0.99 * level)
+    upward = _crossing_exceedance(split, horizon, drift, volatility)
+    downward = _crossing_exceedance(level - split, horizon, -drift, volatility)
+    return min(1.0, upward + downward)
+
+
+_TAIL_CUTS = (1e-12, 1e-9, 1e-7, 1e-5, 1e-4, 1e-3)
+"""Bounds at which an integral's tail may be cut, tightest first.
+
+The bound is loose by a factor of two *in the level*, so a tight cut puts the
+ceiling about fifteen standard deviations out, and for a losing strategy the
+coefficients at that level are ``exp(15 total_sharpe)``. Insisting on the
+tightest cut therefore refuses records that ordinary sampling noise produces: a
+strategy with a true Sharpe ratio of 0.6 over a year throws an estimated total
+Sharpe ratio below -1.76 about once in a hundred times, and that record's
+drawdown still deserves an answer.
+
+So the cuts are tried in order and the first one whose ceiling the expansion can
+reach is used, which carries the domain out to a total Sharpe ratio of -3.23.
+
+Loosening the cut costs nothing measurable, which is worth stating because it
+is not obvious. The cut is applied to a *bound* that is loose by a factor of two
+in the level, so a bound of ``1e-3`` sits where the true exceedance is nearer
+``1e-12``; measured against the closed form at zero drift, every cut in this
+ladder gives the same relative error of ``2e-12``, and what is left is the
+quadrature rather than the truncation.
+"""
+
+
+def _tail_ceiling(horizon: float, drift: float, volatility: float, cut: float) -> float:
+    """A level whose exceedance is provably under ``cut``."""
+    scale = volatility * math.sqrt(horizon)
+    level = max(2.0 * scale, 2.0 * abs(drift) * horizon)
+    for _ in range(200):
+        if _range_bound(level, horizon, drift, volatility) < cut:
             return level
-        level *= 2.0
+        level *= 1.5
     raise ValidationError(  # pragma: no cover - unreachable for finite parameters
         f"no level within {level:g} is out of reach of this path"
     )
+
+
+def _integrate_tail(horizon: float, drift: float, volatility: float, cut: float) -> float:
+    """Composite Gauss-Legendre of the exceedance over ``[0, ceiling]``."""
+    ceiling = _tail_ceiling(horizon, drift, volatility, cut)
+    edges = np.linspace(0.0, ceiling, _PANELS + 1)
+    total = 0.0
+    for left, right in pairwise(edges):
+        half = 0.5 * (right - left)
+        centre = 0.5 * (right + left)
+        for node, weight in zip(_NODES, _WEIGHTS, strict=True):
+            total += (
+                half
+                * weight
+                * drawdown_exceedance(
+                    centre + half * node,
+                    horizon,
+                    drift,
+                    volatility,
+                    max_conditioning=_INTEGRAL_CONDITIONING,
+                )
+            )
+    return total
+
+
+def _with_loosening_cut(step: Callable[[float], float]) -> float:
+    """Run ``step`` at the tightest tail cut the expansion can actually reach."""
+    for index, cut in enumerate(_TAIL_CUTS):
+        try:
+            return step(cut)
+        except ValidationError:
+            if index == len(_TAIL_CUTS) - 1:
+                raise
+    raise AssertionError  # pragma: no cover - the loop either returns or raises
 
 
 def expected_maximum_drawdown(horizon: float, drift: float, volatility: float) -> float:
@@ -648,7 +813,7 @@ def expected_maximum_drawdown(horizon: float, drift: float, volatility: float) -
     exceedance is smooth in the level — flat at one near zero, with a tail that
     dies faster than exponentially — so composite Gauss-Legendre over a ceiling
     chosen from the tail itself reaches the closed form at zero drift,
-    ``sigma sqrt(pi T / 2)``, to eleven figures.
+    ``sigma sqrt(pi T / 2)``, to thirteen figures.
 
     The number this returns is the one worth knowing before a drawdown
     happens. At zero drift it is 1.2533 standard deviations of the horizon, so a
@@ -660,16 +825,7 @@ def expected_maximum_drawdown(horizon: float, drift: float, volatility: float) -
     check_parameters(horizon, volatility)
     if not math.isfinite(drift):
         raise ValidationError(f"drift must be finite, got {drift}")
-    ceiling = _tail_ceiling(horizon, drift, volatility)
-    edges = np.linspace(0.0, ceiling, _PANELS + 1)
-    total = 0.0
-    for left, right in pairwise(edges):
-        half = 0.5 * (right - left)
-        centre = 0.5 * (right + left)
-        for node, weight in zip(_NODES, _WEIGHTS, strict=True):
-            level = centre + half * node
-            total += half * weight * drawdown_exceedance(level, horizon, drift, volatility)
-    return total
+    return _with_loosening_cut(lambda cut: _integrate_tail(horizon, drift, volatility, cut))
 
 
 def drawdown_quantile(probability: float, horizon: float, drift: float, volatility: float) -> float:
@@ -685,15 +841,139 @@ def drawdown_quantile(probability: float, horizon: float, drift: float, volatili
     """
     check_parameters(horizon, volatility)
     check_probability(probability, "probability")
-    ceiling = _tail_ceiling(horizon, drift, volatility)
+    ceiling = _with_loosening_cut(lambda cut: _tail_ceiling(horizon, drift, volatility, cut))
     target = 1.0 - probability
     low, high = 0.0, ceiling
     for _ in range(200):
         mid = 0.5 * (low + high)
         if mid <= low or mid >= high:
             break
-        if drawdown_exceedance(mid, horizon, drift, volatility) > target:
+        exceedance = drawdown_exceedance(
+            mid, horizon, drift, volatility, max_conditioning=_INTEGRAL_CONDITIONING
+        )
+        if exceedance > target:
             low = mid
         else:
             high = mid
     return 0.5 * (low + high)
+
+
+@dataclass(frozen=True)
+class DrawdownAssessment:
+    """An observed drawdown beside what the null says to expect of it.
+
+    Attributes:
+        observed: The realised worst drawdown and where it fell.
+        drift: Drift per period used for the null.
+        volatility: Volatility per period used for the null.
+        periods: Length of the record, which is the horizon in those units.
+        estimated: Whether the drift and volatility came from this same record.
+        expected: ``E[MDD]`` under the null.
+        median: The null's median drawdown.
+        percentile: ``P(MDD < observed)``, so 0.5 means a typical drawdown for
+            a strategy like this one.
+        exceedance: ``P(MDD >= observed)``, the p-value against the null.
+        exceedance_bound: The rigorous lower bound from
+            :func:`final_drawdown_exceedance`, which still has digits when the
+            exceedance does not.
+        limit: The level this strategy exceeds one record in twenty.
+    """
+
+    observed: MaximumDrawdown
+    drift: float
+    volatility: float
+    periods: int
+    estimated: bool
+    expected: float
+    median: float
+    percentile: float
+    exceedance: float
+    exceedance_bound: float
+    limit: float
+
+
+def assess_drawdown(
+    returns: ArrayLike,
+    *,
+    drift: float | None = None,
+    volatility: float | None = None,
+) -> DrawdownAssessment:
+    """Compare a record's worst drawdown with the law its own parameters imply.
+
+    One period is one unit of time here, so the horizon is the number of
+    returns and the drift and volatility are per period. Annualising would
+    change nothing: the law depends on its arguments only through
+    ``level / (volatility sqrt(horizon))`` and ``drift sqrt(horizon) / volatility``,
+    both of which are unit-free.
+
+    **What this is and is not.** With ``drift`` and ``volatility`` supplied, the
+    exceedance is a p-value for the hypothesis that the record came from a
+    Brownian motion with those parameters. Left to be estimated from the record,
+    it is not: the null is being fitted to the same path whose drawdown is being
+    judged, and the two are not independent -- a path that happened to fall a
+    long way also reports a larger volatility, which makes its own drawdown look
+    ordinary.
+
+    Both effects are one-sided and both are measured. On simulated records of
+    252 observations with a known drift and volatility, a nominal 5% test
+    rejects 3.4% of the time, because the drawdown is read off 252 marks while
+    the law describes the path underneath them -- and a discretely observed
+    drawdown is smaller, by 7% in the mean at this count and 1.4% at sixteen
+    times it. Re-estimating the drift and volatility from the same path takes
+    the same test from 3.4% to 0.27%, a further factor of thirteen, which is
+    much the larger of the two.
+
+    So the exceedance understates, and it is still the right number to look at,
+    because the alternative is comparing a drawdown against nothing. It is
+    reported with :attr:`DrawdownAssessment.estimated` set so that it cannot be
+    mistaken for the other thing, and a caller who has a drift and a volatility
+    from somewhere else should pass them.
+
+    Args:
+        returns: Per-period returns, additive.
+        drift: Drift per period for the null. Estimated from ``returns`` if
+            omitted.
+        volatility: Volatility per period for the null. Estimated from
+            ``returns`` if omitted.
+    """
+    sample = as_returns(returns, min_length=2)
+    estimated = drift is None or volatility is None
+    mean = float(np.mean(sample)) if drift is None else drift
+    sigma = float(np.std(sample, ddof=1)) if volatility is None else volatility
+    periods = int(sample.size)
+    if not math.isfinite(sigma) or sigma <= 0.0:
+        raise ValidationError(
+            "the returns have no variation, so no drawdown law is defined for them"
+        )
+    if abs(mean) * periods > 1e8 * sigma * math.sqrt(periods):
+        # Constant returns do not give a sample standard deviation of exactly
+        # zero -- twenty copies of 0.01 leave 1.7e-18 behind -- so the test that
+        # matters is whether the record has any variation *relative to its own
+        # drift*. Without this the law is asked for a drawdown of 1e-27
+        # standard deviations and refuses for the wrong reason.
+        raise ValidationError(
+            f"the returns have no variation to speak of: a drift of {mean:g} per "
+            f"period against a volatility of {sigma:g} is a deterministic record, "
+            f"and its drawdown is not a question about chance"
+        )
+    observed = maximum_drawdown(sample)
+    horizon = float(periods)
+    if observed.depth == 0.0:
+        percentile, exceedance, bound = 0.0, 1.0, 1.0
+    else:
+        percentile = drawdown_survival(observed.depth, horizon, mean, sigma)
+        exceedance = 1.0 - percentile
+        bound = final_drawdown_exceedance(observed.depth, horizon, mean, sigma)
+    return DrawdownAssessment(
+        observed=observed,
+        drift=mean,
+        volatility=sigma,
+        periods=periods,
+        estimated=estimated,
+        expected=expected_maximum_drawdown(horizon, mean, sigma),
+        median=drawdown_quantile(0.5, horizon, mean, sigma),
+        percentile=percentile,
+        exceedance=exceedance,
+        exceedance_bound=bound,
+        limit=drawdown_quantile(0.95, horizon, mean, sigma),
+    )
