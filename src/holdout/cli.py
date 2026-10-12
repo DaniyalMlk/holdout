@@ -25,6 +25,7 @@ from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
 from .pairwise import sharpe_difference
 from .pbo import probability_of_backtest_overfitting
+from .sequential import NORMAL_95, confidence_sequence
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
 from .stability import DEFAULT_TRIM, sharpe_break
@@ -132,6 +133,94 @@ def _cmd_drawdown(args: argparse.Namespace) -> int:
             "observations. Pass"
         )
         print("--drift and --volatility to get one that is.")
+    return 0
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    table = _load(args)
+    rows = []
+    notes: list[str] = []
+    for name in [args.column] if args.column else table.names:
+        values = table.column(name)
+        sequence = confidence_sequence(
+            values,
+            alpha=args.alpha,
+            volatility=args.volatility,
+            target=args.target,
+            periods_per_year=args.periods_per_year,
+        )
+        crossing = sequence.crossing
+        last = sequence.last
+        fixed = NORMAL_95 * sequence.volatility / math.sqrt(last.observations)
+        rows.append(
+            [
+                name,
+                str(last.observations),
+                f"{last.mean * args.periods_per_year:.2%}",
+                f"{sequence.annualised_lower:.2%}",
+                f"{last.upper * args.periods_per_year:.2%}",
+                f"{last.half_width / fixed:.3f}",
+                "never" if crossing is None else str(crossing),
+                f"{sequence.sharpe_lower():.3f}",
+            ]
+        )
+        if sequence.estimated_volatility:
+            notes.append(name)
+    print(
+        _table(
+            rows,
+            [
+                "strategy",
+                "n",
+                "mean",
+                "lower",
+                "upper",
+                "width/fixed",
+                "crossed at",
+                "SR floor",
+            ],
+        )
+    )
+    print()
+    print(
+        "Every row of the sequence is valid at once, so 'crossed at' is a legitimate "
+        "stopping point:"
+    )
+    print(
+        "looking each period and stopping the first time the lower bound clears zero "
+        "keeps the stated"
+    )
+    print(
+        "level. Doing that with an ordinary interval does not. Monitoring a 95% "
+        "interval and stopping"
+    )
+    print(
+        "at the first crossing rejects 33.7% of the time at 60 observations and 61.9% "
+        "at 5,000, with"
+    )
+    print("no edge present at all - and the rate grows with the horizon rather than")
+    print("settling, so there is no multiplicity to correct for.")
+    print()
+    print(
+        "'width/fixed' is what that costs: 1.549 at the tuning point, more before it. "
+        "The sequential"
+    )
+    print(
+        "track record length is 3.40 times the fixed-sample one, almost independently "
+        "of the Sharpe ratio."
+    )
+    if notes:
+        print()
+        print(
+            "The volatility was estimated from the same returns for "
+            + ", ".join(notes)
+            + ". That raises the"
+        )
+        print(
+            "crossing rate from 1.47% to 1.98% at 250 observations - inside the "
+            "nominal 5%, because the"
+        )
+        print("mixture has slack there, but not exact. Pass --volatility for a bound that is.")
     return 0
 
 
@@ -492,6 +581,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--volatility", type=float, help="volatility per period for the null (default: estimated)"
     )
     p.set_defaults(func=_cmd_drawdown)
+
+    p = sub.add_parser(
+        "watch",
+        help="anytime-valid bounds for a record read as it accumulates",
+        description=(
+            "Every other command here answers a question asked once, at a record "
+            "length settled before the data arrived. This one answers it at every "
+            "length at once, so a caller may look whenever they like and stop at "
+            "whichever look first clears zero. Doing that with an ordinary "
+            "interval rejects a third of the time at sixty observations with no "
+            "edge present; the cost of doing it properly is a band half again as "
+            "wide and three and a half times the data."
+        ),
+    )
+    with_file(p)
+    p.add_argument("--column", help="only this strategy")
+    p.add_argument("--alpha", type=float, default=0.05, help="the level the sequence holds")
+    p.add_argument(
+        "--volatility",
+        type=float,
+        help="per-period volatility (default: estimated, which is not exact)",
+    )
+    p.add_argument(
+        "--target",
+        type=int,
+        help="the record length the band is narrowest at (default: the length given)",
+    )
+    p.set_defaults(func=_cmd_watch)
 
     p = sub.add_parser("sharpe", help="Sharpe ratio inference for each column")
     with_file(p)

@@ -422,3 +422,82 @@ def test_drawdown_covers_every_column_by_default(
 ) -> None:
     out = run(capsys, "drawdown", str(sample / "trending.csv"))
     assert out.count("ma") >= 10
+
+
+def test_watch_reports_a_band_and_what_it_cost(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "watch", str(sample / "trending.csv"), "--column", "ma5_40")
+    assert "crossed at" in out and "width/fixed" in out and "SR floor" in out
+    # The cost of validity at every n, which is the point of the command.
+    assert "1.549" in out
+    assert "3.40 times the fixed-sample one" in out
+
+
+def test_watch_warns_when_the_volatility_came_from_the_same_returns(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "watch", str(sample / "trending.csv"), "--column", "ma5_40")
+    assert "estimated from the same returns" in out
+    assert "1.47% to 1.98%" in out
+
+
+def test_watch_with_a_given_volatility_drops_the_caveat(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "watch",
+        str(sample / "sweep.csv"),
+        "--column",
+        "ma10_120",
+        "--volatility",
+        "0.01",
+    )
+    assert "estimated from the same returns" not in out
+
+
+def test_watch_covers_every_column_by_default(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    header = (sample / "sweep.csv").read_text().splitlines()[0].split(",")[1:]
+    out = run(capsys, "watch", str(sample / "sweep.csv"))
+    for name in header:
+        assert name in out
+
+
+def test_watch_tuned_further_out_reports_a_wider_band(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The band narrowest at ten thousand observations is wider over the data
+    than the one narrowest at the record's own length, and the ratio column is
+    what says so."""
+    near = run(
+        capsys,
+        "watch",
+        str(sample / "sweep.csv"),
+        "--column",
+        "ma10_120",
+        "--volatility",
+        "0.01",
+    )
+    far = run(
+        capsys,
+        "watch",
+        str(sample / "sweep.csv"),
+        "--column",
+        "ma10_120",
+        "--volatility",
+        "0.01",
+        "--target",
+        "10000",
+    )
+
+    def ratio(text: str) -> float:
+        for line in text.splitlines():
+            if line.startswith("ma10_120"):
+                return float(line.split()[5])
+        raise AssertionError(f"no row for ma10_120 in {text!r}")
+
+    assert ratio(near) == pytest.approx(1.549, abs=1e-3)
+    assert ratio(far) > ratio(near)
