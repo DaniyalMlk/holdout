@@ -384,3 +384,105 @@ the domain is enforced rather than hoped for. And the exceedance an estimated
 null reports is not a p-value: a nominal 5% test rejects 3.4% of the time from
 discrete monitoring alone and 0.27% once the drift and volatility are estimated
 from the same path.
+
+## Phase 14 — A record that is watched, not sampled once
+
+- [x] The normal-mixture martingale, exposed so the validity can be integrated
+- [x] The boundary as its level set, asserted in both directions
+- [x] The mixing variance from the fixed point it is the solution of
+- [x] A confidence sequence over a return series, with the first crossing
+- [x] The sequential counterpart of the minimum track record length
+- [x] A simulation of what monitoring a fixed-sample interval costs
+- [x] The estimated-volatility case measured rather than caveated
+- [x] A `watch` subcommand that prints the cost beside the band
+
+### The test nobody was running
+
+Everything else here is a fixed-sample test. `probabilistic_sharpe_ratio` asks
+whether a record is significant at `n` observations with `n` settled before the
+data arrives, and `minimum_track_record_length` inverts it. Nobody uses a track
+record that way. A record accumulates, somebody looks again each month, and the
+decision to call it established is taken at whichever look first makes it look
+established.
+
+Simulate that. Independent normals with a mean of exactly zero, the ordinary
+two-sided 95% interval computed at every observation, stop at the first crossing:
+
+| observations | rejection rate |
+|---|---|
+| 60 | 33.7% |
+| 250 | 44.1% |
+| 1,000 | 52.5% |
+| 5,000 | 61.9% |
+
+The rate *grows with the horizon*, which is the fact that matters. It is not a
+multiplicity to be divided out, because there is no `n` to divide by: the
+partial sum's fluctuations grow like `sqrt(2 n log log n)` and the interval only
+like `sqrt(n)`, so a long enough look finds something with probability one. A
+rule with no size cannot be corrected, only replaced.
+
+### What replaces it, and why its validity is checkable
+
+A confidence sequence: an interval at every `n` such that the chance any of them
+ever misses the truth is at most `alpha`. The construction is the normal
+mixture, and the whole of its validity is one claim — that
+
+    M(n) = sqrt(rho / (V + rho)) exp(S**2 / (2 (V + rho)))
+
+is a martingale. So that claim is integrated rather than cited. One step of it
+against the normal density, by a Simpson rule the test file writes out itself so
+that nothing is checked against its own arithmetic, reproduces its current value
+to 2e-15 at five different partial sums and variance levels. Ville's inequality
+then bounds the probability it ever reaches `1 / alpha`, and the boundary is
+exactly that level set — asserted in both directions, because a boundary that
+has drifted from its martingale has no theorem behind it.
+
+### The tuning is a fixed point, not a guess
+
+`rho` decides where the boundary is tightest. Differentiating the boundary in
+`rho` at a target variance `V*` gives `r - log(1 + r) = 2 log(1 / alpha)` with
+`r = V* / rho` — one dimension, nothing in it but the confidence level, and
+`r = 8.211968` at 95%. Verified against the equation it came from and separately
+by sweeping, which also shows the optimum is flat: ten per cent either way costs
+three parts in ten thousand. A flat region, not a cliff, which is the useful
+thing to know about a tuning choice.
+
+### The price, stated twice
+
+In width: 1.548560 times the fixed-sample interval at the tuning point, 1.950657
+a tenth of the way there, 4.563248 a hundredth. Those are functions of
+`n / target` alone — identical to six decimals at tuning points from a hundred
+observations to a hundred thousand — so the horizon is the only thing a caller
+has to choose.
+
+In data: the sequential track record length is **3.40 times** the fixed-sample
+one, and the multiple is a property of the mixture rather than of the strategy —
+3.4047 at an annual Sharpe ratio of 0.3, 3.4040 at 0.5, 3.4047 at 1.0, 3.3977 at
+2.0. Being allowed to stop whenever the record looks good costs a factor of
+three and a half in observations. Self-tuning the mixture at the answer rather
+than at the fixed-sample length is worth 5% of that, and is why the figure is a
+property of the method and not of an arbitrary choice.
+
+### Where the bound looks slack, and is not
+
+Measured against the null, a sequence tuned at sixty observations crosses 1.35%
+of the time by that point, against a nominal 5%. That reads as a bound three
+times too conservative, and tuning it away would be a mistake: the guarantee
+covers *all* `n`, and most of the budget is spent in the far future. The same
+paths run longer cross 2.46% of the time by four times the tuning point, 3.48%
+by twenty times and 3.64% by a hundred. The 5% is being spent; the simulation
+was looking at the wrong part of the horizon.
+
+A test that measured only the first number would have concluded the construction
+was loose. The lesson is the one about unreachable guards from the other
+direction: a bound whose budget is spent outside the window you measured in
+looks tighter than it is, not looser.
+
+### The estimated volatility, measured
+
+The derivation assumes a known variance and a caller has a sample one.
+Substituting it raises the crossing rate from 1.47% to 1.98% at 250
+observations: a 35% increase in false alarms, still inside the nominal 5%
+because the mixture has slack there. That is the whole justification for
+allowing the substitution, and it is a number rather than the phrase
+"approximately valid". The command line names the columns it applied to.

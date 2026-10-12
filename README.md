@@ -802,6 +802,85 @@ ordinary. Both effects are one-sided, so `assess_drawdown` carries a flag saying
 which case it is, and the command line says in words that an estimated null does
 not give a p-value.
 
+## A record that is watched, not sampled once
+
+Everything above answers a question asked once, at a record length settled
+before the data arrived. Nobody reads a track record that way: it accumulates,
+somebody looks again each month, and the decision is taken at whichever look
+first makes it look established.
+
+That rule has no size. Independent normals with a mean of exactly zero, the
+ordinary 95% interval computed every period, stop at the first crossing:
+
+| observations | rejection rate |
+|---|---|
+| 60 | 33.7% |
+| 250 | 44.1% |
+| 1,000 | 52.5% |
+| 5,000 | 61.9% |
+
+The rate grows with the horizon, so there is nothing to divide out — the partial
+sum's fluctuations grow like `sqrt(2 n log log n)` and the interval only like
+`sqrt(n)`. A long enough look finds something with probability one.
+
+```bash
+holdout watch records.csv
+```
+
+```
+strategy      n    mean    lower   upper  width/fixed  crossed at  SR floor
+---------------------------------------------------------------------------
+real_edge  1200  28.41%    6.77%  50.05%        1.549        1021     0.435
+marginal   1200   8.07%  -14.37%  30.52%        1.549       never    -0.891
+nothing    1200  12.21%   -9.86%  34.28%        1.549       never    -0.621
+```
+
+Every row of the sequence holds at once, so `crossed at` is a legitimate
+stopping point rather than the result of a search.
+
+### The validity is an identity, and it is integrated
+
+The construction is the normal mixture, and all of its validity is the claim
+that
+
+```
+M(n) = sqrt(rho / (V + rho)) * exp(S**2 / (2 (V + rho)))
+```
+
+is a martingale, for `S` the centred partial sum and `V = n sigma**2`. So the
+test suite integrates one step of it against the normal density — by a Simpson
+rule written out in the test file, so that nothing is checked against its own
+arithmetic — and gets its current value back to 2e-15. Ville's inequality does
+the rest, and the rejection boundary is exactly the level set `M = 1 / alpha`,
+asserted in both directions.
+
+The mixing variance is derived rather than chosen: the stationarity condition is
+`r - log(1 + r) = 2 log(1 / alpha)` with `r = target / rho`, one dimension with
+nothing in it but the confidence level, `8.211968` at 95%. Around the optimum the
+boundary is flat — ten per cent either way costs three parts in ten thousand.
+
+### What it costs, in width and in data
+
+`width/fixed` above is 1.548560 at the tuning point, 1.950657 a tenth of the way
+there and 4.563248 a hundredth; those are functions of `n / target` alone, the
+same to six decimals at tuning points from a hundred observations to a hundred
+thousand. And `sequential_track_record_length` is **3.40 times**
+`minimum_track_record_length`, a multiple that barely moves with the strategy:
+3.4047 at an annual Sharpe of 0.3, 3.3977 at 2.0.
+
+### Where it looks slack
+
+Against the null the sequence crosses 1.35% of the time by its tuning point, not
+5% — which reads as a bound three times too conservative and is not. The
+guarantee covers every `n`, and the rest of the budget is spent further out:
+2.46% by four times the tuning point, 3.48% by twenty, 3.64% by a hundred.
+
+And the derivation wants a known variance where a caller has a sample one.
+Substituting it takes the crossing rate from 1.47% to 1.98% at 250 observations —
+a 35% increase in false alarms, inside the nominal 5% because of exactly that
+slack. Which is a number, rather than the words "approximately valid"; pass
+`--volatility` for a bound that needs no such sentence.
+
 ## Layout
 
 | Module | Contents |
