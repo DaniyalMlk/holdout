@@ -46,12 +46,13 @@ the tuned ``rho`` it is wider by three parts in ten thousand — so the choice s
 in a flat region rather than on a cliff, which is the useful thing to know about
 it.
 
-**What validity at every n costs.** At its tuning point the band is 1.5486
-times the width of the fixed-sample interval, a tenth of the way there 1.9507
-times, and a hundredth 3.6377 — ratios that depend on where you are relative to
-the tuning point and not on the tuning point itself, which is worth knowing
-because it means the only thing to choose is the horizon that matters. In
-observations: the sequential analogue of the minimum track record
+**What validity at every n costs.** At its tuning point the band is 1.548560
+times the width of the fixed-sample interval, a tenth of the way there 1.950657
+times, and a hundredth 4.563248. Those are functions of ``n / target`` alone —
+identical to six decimals at tuning points from a hundred observations to a
+hundred thousand — so the only thing a caller has to choose is the horizon that
+matters to them. In observations: the sequential analogue of the minimum track
+record
 length is **3.40 times** the fixed-sample length, and that ratio is a property
 of the mixture rather than of the strategy — 3.4047 at an annual Sharpe ratio of
 0.3, 3.4040 at 0.5, 3.4047 at 1.0, 3.3977 at 2.0.
