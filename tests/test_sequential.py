@@ -2,9 +2,10 @@
 
 **The validity is checked as an identity, not cited.** Everything in this module
 rests on one claim: that the normal mixture is a martingale. So that claim is
-integrated. One step of the mixture against eighty Gauss-Hermite nodes
-reproduces its own current value to 4e-16, at several partial sums and several
-variance levels — and the boundary is checked to be exactly the level set where
+integrated — by a Simpson rule written out here rather than a quadrature taken
+from a library, so the check shares no code with the thing it checks. One step
+of the mixture reproduces its own current value to 2e-15, at several partial
+sums and several variance levels — and the boundary is checked to be exactly the level set where
 that martingale reaches ``1 / alpha``, in both directions, because a boundary
 that has drifted from its martingale has no theorem behind it.
 
@@ -41,6 +42,7 @@ number because "approximately valid" is not one.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -60,6 +62,7 @@ from holdout import (
     sequential_track_record_length,
 )
 from holdout.sequential import _inverse_normal, _tightest_ratio
+from holdout.series import FloatArray
 
 ONE_SIDED_95 = 1.6448536269514722
 
@@ -67,11 +70,26 @@ ONE_SIDED_95 = 1.6448536269514722
 # -- the martingale, which is where the validity comes from --------------------
 
 
-def gauss_hermite(nodes: int = 80) -> tuple[np.ndarray, np.ndarray]:
-    """Probabilist's Hermite nodes and weights, so the measure is the standard
-    normal and the weights sum to ``sqrt(2 pi)``."""
-    abscissae, weights = np.polynomial.hermite_e.hermegauss(nodes)
-    return abscissae, weights / math.sqrt(2.0 * math.pi)
+def against_the_normal(
+    integrand: Callable[[float], float], *, panels: int = 4000, reach: float = 12.0
+) -> float:
+    """Integrate ``integrand`` against the standard normal density, by Simpson.
+
+    Deliberately plain arithmetic rather than a rule out of a library: the point
+    of the test below is that the martingale property is checked by something
+    sharing no code with the thing being checked. Twelve standard deviations and
+    four thousand panels reach 2e-15 on this integrand, three orders tighter
+    than the claim needs.
+    """
+    step = 2.0 * reach / panels
+    total = integrand(-reach) + integrand(reach)
+    for index in range(1, panels):
+        total += (4.0 if index % 2 else 2.0) * integrand(-reach + index * step)
+    return total * step / 3.0
+
+
+def normal_density(node: float) -> float:
+    return math.exp(-0.5 * node * node) / math.sqrt(2.0 * math.pi)
 
 
 @pytest.mark.parametrize(
@@ -85,12 +103,15 @@ def test_the_mixture_is_a_martingale(total: float, count: int) -> None:
     sigma = 0.017
     mixing = mixing_variance(250.0 * sigma * sigma)
     variance = count * sigma * sigma
-    abscissae, weights = gauss_hermite()
-    expected = sum(
-        weight * mixture_martingale(total + sigma * node, variance + sigma * sigma, mixing)
-        for node, weight in zip(abscissae, weights, strict=True)
+
+    def step(node: float) -> float:
+        return normal_density(node) * mixture_martingale(
+            total + sigma * node, variance + sigma * sigma, mixing
+        )
+
+    assert against_the_normal(step) == pytest.approx(
+        mixture_martingale(total, variance, mixing), rel=1e-13
     )
-    assert expected == pytest.approx(mixture_martingale(total, variance, mixing), rel=1e-14)
 
 
 def test_the_mixture_starts_at_one() -> None:
@@ -196,7 +217,7 @@ def test_the_slack_is_spent_further_out_than_the_tuning_point() -> None:
     paths = 4000
     rates = []
     crossed = np.zeros(paths, dtype=bool)
-    running = np.zeros(paths)
+    running: FloatArray = np.zeros(paths, dtype=np.float64)
     seen = 0
     for horizon in (tune, tune * 4, tune * 20, tune * 100):
         while seen < horizon:
@@ -210,7 +231,7 @@ def test_the_slack_is_spent_further_out_than_the_tuning_point() -> None:
                 ]
             )
             crossed |= (np.abs(totals) >= level).any(axis=1)
-            running = totals[:, -1]
+            running = np.asarray(totals[:, -1], dtype=np.float64)
             seen += size
         rates.append(float(crossed.mean()))
     assert rates == sorted(rates)
@@ -296,10 +317,10 @@ def test_a_higher_confidence_demands_a_longer_record() -> None:
 
 def returns_with_drift(
     count: int, sharpe: float, *, seed: int = 11, sigma: float = 0.01
-) -> np.ndarray:
+) -> FloatArray:
     generator = np.random.default_rng(seed)
     drift = sharpe / math.sqrt(252.0) * sigma
-    return drift + sigma * generator.standard_normal(count)
+    return np.asarray(drift + sigma * generator.standard_normal(count), dtype=np.float64)
 
 
 def test_the_sequence_reports_one_row_per_observation_from_the_start() -> None:

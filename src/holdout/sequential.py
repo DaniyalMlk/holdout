@@ -29,8 +29,8 @@ the drift with a normal prior of variance ``rho``:
     M(n) = sqrt(rho / (V + rho)) * exp(S**2 / (2 (V + rho)))
 
 where ``S`` is the centred partial sum and ``V = n sigma**2``. That is a
-martingale starting at one — checked here against a Gauss-Hermite quadrature on
-the increment, to 4e-16, rather than cited — so Ville's inequality bounds the
+martingale starting at one — checked here by integrating one step of it against
+the normal density, to 2e-15, rather than cited — so Ville's inequality bounds the
 probability it ever reaches ``1 / alpha`` by ``alpha``, and the level set
 ``M = 1 / alpha`` is the boundary
 
@@ -139,8 +139,8 @@ def mixture_martingale(total: float, variance: float, mixing: float) -> float:
     ``total`` is ``sum(x_i - mu)`` and ``variance`` is ``n sigma**2``. Exposed
     because the validity of everything else here is the statement that this is a
     martingale, and a claim that can be evaluated is worth more than a citation:
-    the test file integrates one step of it against Gauss-Hermite nodes and gets
-    agreement to 4e-16.
+    the test file integrates one step of it against the normal density, with a
+    Simpson rule it writes out itself, and gets agreement to 2e-15.
     """
     if mixing <= 0.0:
         raise ValidationError(f"the mixing variance must be positive, got {mixing!r}")
