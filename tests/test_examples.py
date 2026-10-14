@@ -88,3 +88,42 @@ def test_the_sharpe_difference_example_measures_both_tests_size(
     assert strong["robust"] > 0.05
     assert strong["ratio"] == pytest.approx(1.65, abs=0.05)
     assert "All figures reproduced" in capsys.readouterr().out
+
+
+def test_the_selected_strategy_example_shows_both_sides_of_the_correction(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The collapse, the price, and the assumption that undoes it.
+
+    The naive interval's coverage of the selected strategy's own truth falls
+    from 95% out of two candidates to 31% out of fifty while the conditional
+    one holds throughout, and the simulated selection bias agrees with the
+    closed-form expected maximum the simulation never calls. The correction
+    costs nothing four standard errors clear of the runner-up. And under an
+    equicorrelation of 0.99 the conditional interval covers 55% while being
+    ninety wide: it is the wrong tool for a parameter sweep, which is asserted
+    here rather than hedged in prose.
+    """
+    result = run_example("selected_strategy.py")
+    coverage = result["coverage"]
+    assert coverage[2]["naive_coverage"] > 0.94
+    assert coverage[50]["naive_coverage"] < 0.35
+    for candidates in (2, 5, 10, 50):
+        assert 0.93 < coverage[candidates]["conditional_coverage"] < 0.97
+    assert result["shrinkage_at_four_errors"] == pytest.approx(0.0, abs=1e-4)
+
+    correlated = result["correlated"]
+    assert correlated[0.0]["conditional_coverage"] > correlated[0.0]["naive_coverage"]
+    assert correlated[0.99]["conditional_coverage"] < correlated[0.99]["naive_coverage"]
+    assert correlated[0.99]["conditional_coverage"] < 0.6
+    # Wider and less valid at the same time.
+    assert (
+        correlated[0.99]["median_bounded_conditional_width"]
+        > 5.0 * correlated[0.0]["median_bounded_conditional_width"]
+    )
+
+    committee = result["committee"]
+    assert committee["selected"] == 0
+    assert committee["shrinkage"] > 1.0
+    assert committee["inflation"] > 5.0
+    assert "wider and less valid" in capsys.readouterr().out
