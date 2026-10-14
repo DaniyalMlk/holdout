@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -501,3 +502,55 @@ def test_watch_tuned_further_out_reports_a_wider_band(
 
     assert ratio(near) == pytest.approx(1.549, abs=1e-3)
     assert ratio(far) > ratio(near)
+
+
+def _first_number(text: str, prefix: str) -> float:
+    """The first number on the line starting with ``prefix``."""
+    line = next(x for x in text.splitlines() if x.startswith(prefix))
+    found = re.search(r"-?\d+\.\d+", line)
+    assert found is not None, line
+    return float(found.group())
+
+
+def test_selected_reports_the_margin_and_both_intervals(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "selected", str(sample / "trending.csv"))
+    assert "30 strategies over 2520 periods" in out
+    assert "margin:" in out
+    assert "median-unbiased:" in out
+    assert "conditional 95%:" in out
+    assert "ignoring the search:" in out
+    # On a sweep over neighbouring moving averages the winner barely clears the
+    # runner-up, so the honest interval is much wider than the naive one. That
+    # is the command's point, not a defect in it.
+    assert 0.0 < _first_number(out, "margin:") < 1.0
+    assert _first_number(out, "the search costs") > 2.0
+
+
+def test_selected_shrinks_the_winning_estimate(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(capsys, "selected", str(sample / "trending.csv"))
+
+    assert _first_number(out, "median-unbiased:") < _first_number(out, "raw sharpe:")
+
+
+def test_selected_honours_the_level(sample: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    ninety = run(capsys, "selected", str(sample / "trending.csv"), "--level", "0.90")
+    ninety_nine = run(capsys, "selected", str(sample / "trending.csv"), "--level", "0.99")
+    assert "conditional 90%:" in ninety
+    assert "conditional 99%:" in ninety_nine
+
+    def width(text: str) -> float:
+        line = next(x for x in text.splitlines() if x.startswith("conditional"))
+        return float(line.split("(")[1].split()[0])
+
+    assert width(ninety_nine) > width(ninety)
+
+
+def test_selected_refuses_a_single_strategy(sample: Path, tmp_path: Path) -> None:
+    rows = (sample / "sweep.csv").read_text().splitlines()
+    one = tmp_path / "one.csv"
+    one.write_text("\n".join(",".join(row.split(",")[:2]) for row in rows) + "\n")
+    assert main(["selected", str(one)]) == 2

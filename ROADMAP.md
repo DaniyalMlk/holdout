@@ -486,3 +486,121 @@ observations: a 35% increase in false alarms, still inside the nominal 5%
 because the mixture has slack there. That is the whole justification for
 allowing the substitution, and it is a number rather than the phrase
 "approximately valid". The command line names the columns it applied to.
+
+## Phase 15 — The record that was chosen, conditional on its having been chosen
+
+- [x] A numerically stable log upper tail for the normal, with the crossover
+      and the term count swept rather than chosen
+- [x] The conditional law of the winning estimate: a normal truncated below at
+      the best of the others
+- [x] A confidence interval for the selected strategy's true Sharpe by
+      inverting that law, and the median-unbiased point estimate from it
+- [x] The naive interval reported beside it rather than replaced by it
+- [x] A simulation of both coverages, so the claim is a number in the package
+- [x] An equicorrelation in that simulation, to test the one assumption
+- [x] A `selected` subcommand and a worked example
+
+### The question nobody was answering
+
+`deflated` asks whether the best of a set of records is significant and returns
+a probability; `multiple` haircuts it. Neither says what the selected
+strategy's Sharpe ratio *is*, and the number carried forward into the
+allocation is the winning estimate itself — chosen for being large.
+
+Condition on the selection. Hold the losers' estimates fixed and the winner's
+was drawn from its own sampling distribution restricted to the event that it
+exceeded the best of them: a normal truncated below at a known point. Inverting
+that law in the mean gives an interval, and the inversion is exact rather than
+asymptotic.
+
+### The ordinary interval's coverage collapses in the number of candidates
+
+Under a null where every candidate has the same true Sharpe and a unit standard
+error, the naive 95% interval on the *selected* strategy's estimate covers that
+strategy's own truth 95.1% of the time out of two candidates, 88.3% out of
+five, 77.8% out of ten and **30.5% out of fifty**. The conditional interval
+holds 94.8% to 95.2% across all four. Past a few dozen candidates the naive
+interval is wrong twice as often as it is right.
+
+The bias it is missing is the expected maximum, and that is checkable against
+something already here: the simulated gap between the winning estimate and the
+winner's own truth comes out 0.557, 1.156, 1.532 and 2.240 against
+`expected_maximum_normal` at 0.564, 1.163, 1.539 and 2.249. Within 1.4%, from a
+simulation that never calls it.
+
+### The monotonicity was the thing to get right, and the first attempt had it backwards
+
+The conditional tail is *increasing* in the mean — raise the mean and the
+observed value stops looking like a large draw. The first implementation
+assumed the opposite and returned an upper bound of 3e40, which is the kind of
+wrong answer that is obvious. The useful consequence is less obvious: since the
+tail runs from zero to one over the whole line, every level is attained at a
+finite mean, so **the interval is finite however close the race was**. A photo
+finish feels as though it should admit any true value at all. What happens
+instead is that the bound runs out at `log(1 / alpha) * deviation / margin` —
+123 standard errors at a margin of three hundredths of one, 111 at a thirtieth.
+An exact tie is the one degenerate case and raises rather than returning an
+infinity.
+
+### The price is the width, and the mean width is the wrong way to quote it
+
+The conditional intervals average 25.4 to 67.2 wide against the naive 3.92,
+which sounds unusable. Their medians are 6.0, 9.0, 10.6 and 14.7 — between 1.5
+and 3.7 times the naive width. The difference is a heavy right tail made
+entirely of near-ties, so quoting the mean would describe the typical case by
+the worst one. Both are reported.
+
+And the correction costs nothing when the winner is clear. With one candidate
+four standard errors ahead of nine others the median conditional width is 4.10
+against 3.92, a 5% premium, and the naive coverage has itself recovered to
+94.3%. The median-unbiased estimate behaves the same way: at four standard
+errors of margin it is the raw estimate to four decimal places, at two it is
+0.031 below, at one 0.314 below, at a tenth 6.84 below. Everything here is a
+statement about how close the race was and nothing about how many candidates
+there were.
+
+### Where the one assumption fails, the two intervals change places
+
+The conditional law treats the winner's estimate as independent of the losers'.
+A sweep over neighbouring parameters is not. Imposing an equicorrelation on ten
+otherwise identical candidates:
+
+| rho | naive coverage | conditional coverage | median width |
+|---|---|---|---|
+| 0.00 | 78.5% | 94.9% | 10.8 |
+| 0.50 | 86.1% | 94.6% | 14.1 |
+| 0.75 | 90.5% | 91.4% | 19.0 |
+| 0.80 | 91.4% | 90.0% | 21.0 |
+| 0.90 | 93.2% | 84.1% | 28.9 |
+| 0.99 | 94.3% | 55.3% | 90.0 |
+
+They cross at about `rho = 0.78`. Correlation shrinks the winner's curse — the
+mean selection bias falls from 1.53 to 0.15 — so the naive interval recovers,
+while the conditional one becomes *both wider and less valid*, which is not a
+trade a reader would guess. Above three quarters this phase is the wrong tool.
+With fifty candidates the crossing is much further out, because the naive
+interval has so much further to fall: at `rho = 0.5` it covers 68.2% against
+94.6%. The synthetic sweep this library ships is exactly the bad case — thirty
+moving averages over one series, with the winner clearing the runner-up by a
+hundredth of a standard error — and the `selected` command prints that margin
+first for that reason.
+
+### The log tail carries the module
+
+Every quantity here is a ratio of two normal upper tails and both can underflow.
+`erfc` reaches exactly zero near 38 standard deviations, so the direct ratio is
+`0.0 / 0.0` rather than something small — a missing number, not a tiny one. The
+crossover to the Mills asymptotic series and the number of terms were swept
+rather than chosen: at crossover 20 with 7 terms the worst relative error
+against an independent implementation over `z` from 0.1 to 400 is 6.5e-16, and
+the neighbouring cells in both directions are at machine precision too, so the
+choice sits in a flat region rather than on a cliff.
+
+The version-independent statement of the same thing compares the series to
+`erfc` *below* the crossover, where both are accurate: 7.3e-10 at `z = 8`,
+1.3e-12 at 12, 1.3e-14 at 16 and 2.8e-16 at 20. By the time the series is
+used it is already exact, so anything left over against an outside reference
+is that reference's error. An earlier test asserted instead that the worst
+disagreement sat out in the tail, which held against one version of the
+reference and failed against an older one — a fact about the reference's error
+profile rather than about this code, and the one CI failure of the phase.

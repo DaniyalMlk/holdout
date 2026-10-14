@@ -144,13 +144,13 @@ suite records why rather than bending the formula to match.
 import numpy as np
 from holdout import estimate_sharpe
 
-returns = np.random.default_rng(0).normal(0.0006, 0.01, 1260)   # five years of days
+returns = np.random.default_rng(0).normal(0.0006, 0.01, 1260)  # five years of days
 sr = estimate_sharpe(returns, periods_per_year=252)
 
-sr.value                          # per-period ratio
-sr.annualised                     # value * sqrt(252)
-sr.standard_error()               # Mertens: uses the sample skew and kurtosis
-sr.standard_error("normal")       # Lo: assumes iid normal returns
+sr.value  # per-period ratio
+sr.annualised  # value * sqrt(252)
+sr.standard_error()  # Mertens: uses the sample skew and kurtosis
+sr.standard_error("normal")  # Lo: assumes iid normal returns
 sr.confidence_interval(0.95, annualise=True)
 ```
 
@@ -186,15 +186,18 @@ case where the naive annualisation flatters a strategy.
 
 ```python
 from holdout import (
-    deflate_trials, effective_number_of_trials, minimum_track_record_length,
-    probabilistic_sharpe_ratio, trial_correlation,
+    deflate_trials,
+    effective_number_of_trials,
+    minimum_track_record_length,
+    probabilistic_sharpe_ratio,
+    trial_correlation,
 )
 
 probabilistic_sharpe_ratio(0.1, 1250, benchmark=0.0, skewness=-0.5, kurtosis=6.0)
-minimum_track_record_length(0.1, confidence=0.95)          # periods needed
+minimum_track_record_length(0.1, confidence=0.95)  # periods needed
 
 # trials: a (periods, variants) matrix of every variant that was backtested
-result = deflate_trials(trials)                             # best column, N = columns
+result = deflate_trials(trials)  # best column, N = columns
 n_eff = effective_number_of_trials(trial_correlation(trials), method="eigenvalue")
 result = deflate_trials(trials, n_trials=n_eff)
 result.probabilistic, result.deflated, result.expected_maximum
@@ -240,10 +243,10 @@ integer; the participation ratio is smooth but dominated by the largest block.
 ```python
 from holdout import adjust_pvalues, haircut_sharpe, haircut_sharpe_ratios, minimum_sharpe
 
-adjust_pvalues(pvalues, "holm")                     # also bonferroni, sidak, bh, by
-haircut_sharpe(0.063, 2520, n_tests=100)            # one ratio, single-step adjustment
-haircut_sharpe_ratios(sharpes, 2520, method="bh")   # a whole family, step-wise
-minimum_sharpe(2520, 100, periods_per_year=252)     # 1.10: the bar after 100 tests
+adjust_pvalues(pvalues, "holm")  # also bonferroni, sidak, bh, by
+haircut_sharpe(0.063, 2520, n_tests=100)  # one ratio, single-step adjustment
+haircut_sharpe_ratios(sharpes, 2520, method="bh")  # a whole family, step-wise
+minimum_sharpe(2520, 100, periods_per_year=252)  # 1.10: the bar after 100 tests
 ```
 
 Family-wise methods (Bonferroni, Šidák, Holm) bound the chance of *any* false
@@ -278,11 +281,11 @@ What was measured:
 ```python
 from holdout import probability_of_backtest_overfitting
 
-result = probability_of_backtest_overfitting(trials, n_blocks=16)   # (periods, variants)
-result.pbo                    # share of splits where the winner lands at or below the median
-result.logits                 # one per split: logit of the winner's out-of-sample rank
-result.degradation            # (slope, intercept, r^2) of out-of-sample on in-sample
-result.probability_of_loss    # share of splits where the winner loses money out of sample
+result = probability_of_backtest_overfitting(trials, n_blocks=16)  # (periods, variants)
+result.pbo  # share of splits where the winner lands at or below the median
+result.logits  # one per split: logit of the winner's out-of-sample rank
+result.degradation  # (slope, intercept, r^2) of out-of-sample on in-sample
+result.probability_of_loss  # share of splits where the winner loses money out of sample
 result.selection_frequency()  # how often each variant won in-sample
 ```
 
@@ -316,11 +319,11 @@ from holdout import combinatorial_purged_cv, leakage_audit, purged_kfold, walk_f
 
 # observation i is made at start[i]; its label (say a 5-day forward return) is known at end[i]
 splits = purged_kfold(5, start=start, end=end, embargo=10)
-leakage_audit(splits, start, end)          # raises LeakageError if any label overlaps
+leakage_audit(splits, start, end)  # raises LeakageError if any label overlaps
 
 cv = combinatorial_purged_cv(6, 2, start=start, end=end, embargo=10)
-cv.n_paths                                  # 5
-paths = cv.assemble_paths(per_split_oos_returns)   # (5, n): five full backtests
+cv.n_paths  # 5
+paths = cv.assemble_paths(per_split_oos_returns)  # (5, n): five full backtests
 ```
 
 When a label spans several periods, two neighbouring observations share part
@@ -347,8 +350,8 @@ from holdout import reality_check, romano_wolf, superior_predictive_ability
 # differentials: (periods, strategies) of strategy return minus benchmark return
 reality_check(differentials, seed=0).pvalue
 spa = superior_predictive_ability(differentials, seed=0)
-spa.consistent                     # bounded by spa.lower and spa.upper
-romano_wolf(differentials, alpha=0.05, seed=0).rejected   # which ones, strongest first
+spa.consistent  # bounded by spa.lower and spa.upper
+romano_wolf(differentials, alpha=0.05, seed=0).rejected  # which ones, strongest first
 ```
 
 These answer "does anything here beat the benchmark?" without assuming the
@@ -386,9 +389,9 @@ from holdout import Statistic, model_confidence_set
 
 # performance: (periods, models), higher better — returns, or losses negated
 result = model_confidence_set(returns, alpha=0.10, seed=0)
-result.included            # indices in the set, best average first
-result.pvalues             # one per model; in the set when above alpha
-result.at(0.25)            # any other level, without rerunning the bootstrap
+result.included  # indices in the set, best average first
+result.pvalues  # one per model; in the set when above alpha
+result.at(0.25)  # any other level, without rerunning the bootstrap
 model_confidence_set(returns, statistic=Statistic.RANGE, seed=0)
 ```
 
@@ -457,12 +460,12 @@ The pairwise comparison has its own answer:
 from holdout import sharpe_difference
 
 result = sharpe_difference(strategy_a, strategy_b, periods_per_year=252)
-result.annualised_difference   # +0.59 of annualised Sharpe ratio
-result.correlation             # 0.656 — half of why this is not two separate tests
-result.closed_form_error       # Jobson–Korkie with Memmel's correction
-result.robust_error            # Ledoit–Wolf: delta method with a Newey–West covariance
-result.error_ratio             # the robust error over the closed-form one
-result.p_value                 # two-sided, using whichever `method` asked for
+result.annualised_difference  # +0.59 of annualised Sharpe ratio
+result.correlation  # 0.656 — half of why this is not two separate tests
+result.closed_form_error  # Jobson–Korkie with Memmel's correction
+result.robust_error  # Ledoit–Wolf: delta method with a Newey–West covariance
+result.error_ratio  # the robust error over the closed-form one
+result.p_value  # two-sided, using whichever `method` asked for
 ```
 
 Differencing two `estimate_sharpe` standard errors is not a substitute, and it is
@@ -881,6 +884,142 @@ a 35% increase in false alarms, inside the nominal 5% because of exactly that
 slack. Which is a number, rather than the words "approximately valid"; pass
 `--volatility` for a bound that needs no such sentence.
 
+## The record that was chosen, conditional on its having been chosen
+
+`deflated` asks whether the best of a set of records is significant and returns
+a probability. `multiple` haircuts it. Neither says what the selected
+strategy's Sharpe ratio *is* — and the number carried into the allocation is
+the winning estimate itself, which was chosen for being large.
+
+`selection` conditions on that. Hold the losers' estimates fixed, and the
+winner's was drawn from its own sampling distribution restricted to the event
+that it beat them: a normal truncated below at a known point. Inverting that
+law in the mean gives an interval, exactly rather than asymptotically.
+
+```python
+from holdout import selection_inference
+
+# five candidates' per-period Sharpe estimates and standard errors
+inference = selection_inference(
+    [0.98, 0.95, 0.80, 0.41, 0.12],
+    [0.31, 0.30, 0.32, 0.29, 0.33],
+)
+
+inference.selected.margin  # 0.10 standard errors over the runner-up
+inference.interval.median  # -1.213, the median-unbiased estimate
+inference.interval.lower  # -10.84
+inference.interval.naive_lower  # 0.37, ignoring the search
+inference.interval.inflation  # 10.0 times the naive width
+```
+
+### The ordinary interval's coverage collapses in the number of candidates
+
+Under a null where every candidate has the same true Sharpe and a unit standard
+error, the naive 95% interval on the *selected* strategy's estimate covers that
+strategy's own truth:
+
+| candidates | naive | conditional | selection bias | `expected_maximum_normal` |
+|---|---|---|---|---|
+| 2 | 95.1% | 95.0% | 0.557 | 0.564 |
+| 5 | 88.3% | 95.2% | 1.156 | 1.163 |
+| 10 | 77.8% | 94.8% | 1.532 | 1.539 |
+| 50 | 30.5% | 94.9% | 2.240 | 2.249 |
+
+Past a few dozen candidates the naive interval is wrong twice as often as it is
+right. The bias it is missing is the expected maximum, and the last two columns
+are a simulation beside a closed form it never calls — agreement to within
+1.4%, which is `selection_coverage` checking itself against
+`holdout.deflated`.
+
+### The price is the width, and only when the race was close
+
+The conditional intervals *average* 25 to 67 wide against the naive 3.92, which
+sounds unusable. Their medians are 6.0, 9.0, 10.6 and 14.7 — 1.5 to 3.7 times
+the naive width. The gap between the two summaries is a heavy right tail made
+entirely of near-ties, so `selection_coverage` reports both and quoting only
+the mean would describe the typical case by the worst one.
+
+With one candidate four standard errors ahead of nine others, the median
+conditional width is 4.10 against 3.92 and the naive coverage has recovered to
+94.3%. The whole correction is a function of the margin over the runner-up:
+
+| margin, in standard errors | shrinkage of the point estimate |
+|---|---|
+| 0.1 | 6.84 |
+| 0.5 | 1.07 |
+| 1.0 | 0.314 |
+| 2.0 | 0.031 |
+| 4.0 | 0.0000 |
+
+### The interval is finite however close the race was
+
+Which is not the natural guess. A photo finish feels as though it should be
+consistent with any true value at all. The conditional tail is *increasing* in
+the mean and runs from zero to one over the whole line, so every level is
+attained at a finite mean. What happens instead is that the bound runs out at
+`log(1 / alpha) * deviation / margin` — 123 standard errors at a margin of
+three hundredths of one. An exact tie is the one degenerate case and raises
+rather than returning an infinity.
+
+### Where the one assumption fails, the two intervals change places
+
+The conditional law treats the winner's estimate as independent of the losers'.
+A sweep over neighbouring parameters is not, and
+`selection_coverage(..., correlation=rho)` prices that rather than caveating
+it. Ten otherwise identical candidates:
+
+| rho | naive coverage | conditional coverage | median width |
+|---|---|---|---|
+| 0.00 | 78.5% | 94.9% | 10.8 |
+| 0.50 | 86.1% | 94.6% | 14.1 |
+| 0.75 | 90.5% | 91.4% | 19.0 |
+| 0.80 | 91.4% | 90.0% | 21.0 |
+| 0.90 | 93.2% | 84.1% | 28.9 |
+| 0.99 | 94.3% | 55.3% | 90.0 |
+
+They cross at about `rho = 0.78`. Correlation shrinks the winner's curse — the
+mean selection bias falls from 1.53 to 0.15 across that range — so the naive
+interval recovers, while the conditional one becomes *both wider and less
+valid*. Above three quarters, use the ordinary interval. With fifty candidates
+the crossing is much further out because the naive interval has further to
+fall: at `rho = 0.5` it covers 68.2% against 94.6%.
+
+The synthetic sweep this library ships is exactly the bad case, which is why
+the command prints the margin first:
+
+```bash
+holdout sample-data --out sample
+holdout selected sample/trending.csv
+```
+
+```
+30 strategies over 2520 periods
+selected:          ma10_120
+runner-up:         ma5_180 at 1.03 annualised
+margin:            0.06 standard errors over the runner-up
+raw sharpe:        1.05 annualised
+median-unbiased:   -2.50 annualised  (3.55 lower than the raw estimate)
+conditional 95%:  [-17.93, 1.25]  (19.17 wide)
+ignoring the search: [0.44, 1.65]  (1.21 wide)
+the search costs a factor of 15.79 on the width
+```
+
+Thirty moving averages over one series are close to being one strategy, and a
+margin of six hundredths of a standard error is them saying so.
+
+### The log tail carries the module
+
+Every quantity here is a ratio of two normal upper tails and both can
+underflow. `erfc` reaches exactly zero near 38 standard deviations, so the
+direct ratio is `0.0 / 0.0` — a missing number rather than a small one.
+`log_upper_tail` is `erfc` below 20 standard deviations and the Mills
+asymptotic series above it, and both the crossover and the term count were
+swept: that cell's worst relative error against an independent implementation
+over `z` from 0.1 to 400 is 6.5e-16, and its neighbours in both directions are
+at machine precision too. Compared against `erfc` below the crossover, where
+both are accurate, the series' own error is 7.3e-10 at `z = 8` and 2.8e-16 at
+20 — so by the time it is used it is already exact.
+
 ## Layout
 
 | Module | Contents |
@@ -898,5 +1037,6 @@ slack. Which is a number, rather than the words "approximately valid"; pass
 | `spa` | Reality Check, SPA, Romano–Wolf |
 | `mcs` | model confidence set, both statistics |
 | `pairwise` | difference of two Sharpe ratios, Memmel and Ledoit–Wolf variances, Newey–West |
+| `selection` | the selected strategy's Sharpe conditional on its having been selected, and the stable normal log tail |
 | `drawdown` | drawdown statistics, the exact maximum-drawdown law, calibrated limits |
 | `io`, `synthetic`, `cli` | CSV input, the sample sweeps, the `holdout` command |
