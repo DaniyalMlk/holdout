@@ -51,9 +51,10 @@ from zero to one as the mean runs over the line, so every level is attained
 at some finite mean. What actually happens is that the bound runs a long way
 out, at a rate that is a formula rather than a surprise --
 ``log(1 / alpha) * deviation / margin``. At a margin of three hundredths of a
-standard error the lower bound is 110 standard errors below the estimate
-(-35.891 against the small-margin prediction's -35.889). An *exact* tie is the
-one degenerate case, and it raises rather than returning an infinity.
+standard error the lower bound is 123 standard errors below the estimate
+(-35.891 against the small-margin prediction's -35.889, on an estimate of 1.0
+with a standard error of 0.3). An *exact* tie is the one degenerate case, and
+it raises rather than returning an infinity.
 
 **And the correction costs nothing when the winner is clear, so it is not a
 tax on every selection.** With one candidate four standard errors ahead of
