@@ -594,6 +594,13 @@ crossover to the Mills asymptotic series and the number of terms were swept
 rather than chosen: at crossover 20 with 7 terms the worst relative error
 against an independent implementation over `z` from 0.1 to 400 is 6.5e-16, and
 the neighbouring cells in both directions are at machine precision too, so the
-choice sits in a flat region rather than on a cliff. The worst error in that
-cell is attained at `z = 368` rather than at the crossover, which is the sign
-that the piecewise definition has stopped being the limiting thing.
+choice sits in a flat region rather than on a cliff.
+
+The version-independent statement of the same thing compares the series to
+`erfc` *below* the crossover, where both are accurate: 7.3e-10 at `z = 8`,
+1.3e-12 at 12, 1.3e-14 at 16 and 2.8e-16 at 20. By the time the series is
+used it is already exact, so anything left over against an outside reference
+is that reference's error. An earlier test asserted instead that the worst
+disagreement sat out in the tail, which held against one version of the
+reference and failed against an older one — a fact about the reference's error
+profile rather than about this code, and the one CI failure of the phase.

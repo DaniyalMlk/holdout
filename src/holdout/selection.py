@@ -166,21 +166,27 @@ def log_upper_tail(z: float) -> float:
     answer sits in a flat region rather than on a cliff.** Worst relative
     error against an independent implementation over ``z`` from 0.1 to 400:
 
-    ========  ========  ========  ========
-    crossover  5 terms   6 terms   7 terms
-    ========  ========  ========  ========
+    =========  ========  ========  ========
+    crossover   5 terms   6 terms   7 terms
+    =========  ========  ========  ========
     8          2.2e-08   3.7e-09   7.3e-10
     12         1.9e-10   1.4e-11   1.3e-12
     15         1.4e-11   6.6e-13   3.8e-14
     20         4.4e-13   1.2e-14   6.5e-16
     25         3.1e-14   7.1e-16   6.5e-16
-    ========  ========  ========  ========
+    =========  ========  ========  ========
 
     Twenty and seven is the first cell at machine precision, and its
     neighbours in both directions are there too, so the choice is not
-    balanced on a boundary. The worst error in that cell is attained at
-    ``z = 368``, not at the crossover, which is the sign that the piecewise
-    definition has stopped being the limiting thing.
+    balanced on a boundary.
+
+    The version-independent statement of the same thing compares the series to
+    ``erfc`` *below* the crossover, where both are good: the relative
+    disagreement is 7.3e-10 at ``z = 8``, 1.3e-12 at 12, 1.3e-14 at 16 and
+    2.8e-16 at 20. So by the time the series is actually used it is already
+    exact, and the residual difference from any outside reference is that
+    reference's rather than this one's -- which is a claim about this code and
+    not about whatever it was checked against.
     """
     _finite("z", z)
     if z < LOG_TAIL_ASYMPTOTIC_FROM:

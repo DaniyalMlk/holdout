@@ -20,6 +20,7 @@ from scipy.stats import norm
 from holdout import expected_maximum_normal
 from holdout.exceptions import InsufficientDataError, ValidationError
 from holdout.selection import (
+    _MILLS,
     LOG_TAIL_ASYMPTOTIC_FROM,
     conditional_interval,
     log_upper_tail,
@@ -47,10 +48,39 @@ def test_log_upper_tail_matches_an_independent_implementation_everywhere() -> No
         if relative > worst:
             worst, where = relative, z
     assert worst < 5e-15, (worst, where)
-    # The worst error is attained out in the tail rather than at the
-    # crossover, which is the sign that the piecewise definition has stopped
-    # being the limiting thing.
-    assert where > 100.0
+    # Deliberately no assertion about *where* the worst disagreement sits. An
+    # earlier version of this test asserted it was out in the tail, which was
+    # true against one version of the reference and false against an older one
+    # -- it is a fact about the reference's error profile, not about this code.
+    # The claim that belongs here is made in the next test instead, against a
+    # reference that cannot change.
+    assert 0.1 <= where <= 400.0
+
+
+def test_the_series_branch_is_already_exact_where_it_takes_over() -> None:
+    # The version-independent form of the claim: compare the series to erfc
+    # below the crossover, where erfc is still accurate and the two overlap.
+    # The error falls like a high power of z, so by the time the series is
+    # actually used it is below machine precision and anything left over is
+    # the reference's error rather than the series'.
+    def series(z: float) -> float:
+        inverse = 1.0 / (z * z)
+        total = 0.0
+        for coefficient in reversed(_MILLS):
+            total = coefficient + inverse * total
+        return -0.5 * z * z - math.log(z) - 0.5 * math.log(2.0 * math.pi) + math.log(total)
+
+    errors = []
+    for z in (8.0, 12.0, 16.0, LOG_TAIL_ASYMPTOTIC_FROM):
+        exact = math.log(0.5 * math.erfc(z / math.sqrt(2.0)))
+        errors.append(abs(series(z) - exact) / abs(exact))
+    assert all(later < earlier for earlier, later in itertools.pairwise(errors))
+    assert errors[0] < 1e-9
+    assert errors[-1] < 1e-15
+    # And at the crossover the two branches are the same number.
+    assert log_upper_tail(LOG_TAIL_ASYMPTOTIC_FROM) == pytest.approx(
+        math.log(0.5 * math.erfc(LOG_TAIL_ASYMPTOTIC_FROM / math.sqrt(2.0))), rel=1e-14
+    )
 
 
 def test_log_upper_tail_is_continuous_across_the_crossover() -> None:

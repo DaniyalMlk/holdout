@@ -1015,9 +1015,10 @@ direct ratio is `0.0 / 0.0` — a missing number rather than a small one.
 `log_upper_tail` is `erfc` below 20 standard deviations and the Mills
 asymptotic series above it, and both the crossover and the term count were
 swept: that cell's worst relative error against an independent implementation
-over `z` from 0.1 to 400 is 6.5e-16, its neighbours in both directions are at
-machine precision too, and its worst error is attained at `z = 368` rather than
-at the crossover.
+over `z` from 0.1 to 400 is 6.5e-16, and its neighbours in both directions are
+at machine precision too. Compared against `erfc` below the crossover, where
+both are accurate, the series' own error is 7.3e-10 at `z = 8` and 2.8e-16 at
+20 — so by the time it is used it is already exact.
 
 ## Layout
 
