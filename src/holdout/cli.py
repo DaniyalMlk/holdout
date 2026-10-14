@@ -693,7 +693,13 @@ def build_parser() -> argparse.ArgumentParser:
             "95% of the time out of two candidates and 31% out of fifty; this "
             "one covers 95% throughout. What it costs is width, and only when "
             "the race was close: four standard errors clear of the runner-up, "
-            "the two intervals agree to within five per cent."
+            "the two intervals agree to within five per cent. The one "
+            "assumption is that the candidates' estimates are independent. A "
+            "sweep over neighbouring parameters is not, and above a "
+            "correlation of about three quarters the ordinary interval is the "
+            "better of the two -- so read the margin printed below, and if it "
+            "is a hundredth of a standard error the candidates are telling you "
+            "they are the same strategy."
         ),
     )
     with_file(p)
