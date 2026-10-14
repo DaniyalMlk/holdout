@@ -346,3 +346,58 @@ def test_coverage_is_reproducible_from_its_seed() -> None:
     assert first == second
     third = selection_coverage([0.0] * 5, [1.0] * 5, paths=500, seed=12)
     assert third["naive_coverage"] != first["naive_coverage"]
+
+
+# --------------------------------------------------------------------------
+# The assumption, tested rather than restated
+# --------------------------------------------------------------------------
+
+
+def test_correlated_candidates_make_the_two_intervals_change_places() -> None:
+    # The module's one assumption is that the winner's estimate is independent
+    # of the losers', which a parameter sweep over neighbouring settings
+    # violates. The failure is not a small loss of validity: the conditional
+    # interval becomes both wider and less valid, while the naive one recovers.
+    naive = []
+    conditional = []
+    widths = []
+    biases = []
+    for rho in (0.0, 0.5, 0.9):
+        result = selection_coverage([0.0] * 10, [1.0] * 10, paths=2000, seed=4, correlation=rho)
+        naive.append(result["naive_coverage"])
+        conditional.append(result["conditional_coverage"])
+        widths.append(result["median_bounded_conditional_width"])
+        biases.append(result["mean_selection_bias"])
+    # The naive interval improves with correlation and the conditional one decays.
+    assert naive[0] < naive[1] < naive[2]
+    assert conditional[0] > conditional[2]
+    assert conditional[0] > 0.93
+    assert conditional[2] < 0.90
+    assert naive[2] > conditional[2]
+    # Wider and less valid at once, which is the part worth asserting.
+    assert widths[0] < widths[1] < widths[2]
+    # Because correlation shrinks the winner's curse itself.
+    assert biases[0] > 2.5 * biases[2]
+
+
+def test_the_crossover_sits_near_three_quarters() -> None:
+    below = selection_coverage([0.0] * 10, [1.0] * 10, paths=3000, seed=4, correlation=0.5)
+    above = selection_coverage([0.0] * 10, [1.0] * 10, paths=3000, seed=4, correlation=0.9)
+    assert below["conditional_coverage"] > below["naive_coverage"]
+    assert above["conditional_coverage"] < above["naive_coverage"]
+
+
+def test_more_candidates_push_the_crossover_further_out() -> None:
+    # With fifty candidates the naive interval has so much further to fall
+    # that the conditional one is still the better of the two at a
+    # correlation of a half.
+    result = selection_coverage([0.0] * 50, [1.0] * 50, paths=1500, seed=5, correlation=0.5)
+    assert result["naive_coverage"] < 0.75
+    assert result["conditional_coverage"] > 0.92
+
+
+def test_correlation_validation() -> None:
+    with pytest.raises(ValidationError, match=r"correlation must lie in \[0, 1\)"):
+        selection_coverage([0.0, 0.0], [1.0, 1.0], correlation=1.0)
+    with pytest.raises(ValidationError, match=r"correlation must lie in \[0, 1\)"):
+        selection_coverage([0.0, 0.0], [1.0, 1.0], correlation=-0.1)

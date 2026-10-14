@@ -56,6 +56,32 @@ standard error the lower bound is 123 standard errors below the estimate
 with a standard error of 0.3). An *exact* tie is the one degenerate case, and
 it raises rather than returning an infinity.
 
+**The one assumption is independence, and where it fails the two intervals
+change places.** The conditional law holds the losers' estimates fixed and
+treats the winner's as independent of them, which a parameter sweep over
+neighbouring settings badly violates. Imposing an equicorrelation on ten
+otherwise identical candidates (``selection_coverage(..., correlation=rho)``):
+
+====  ================  ======================  ============
+rho   naive coverage    conditional coverage    median width
+====  ================  ======================  ============
+0.00  78.5%             94.9%                   10.8
+0.50  86.1%             94.6%                   14.1
+0.75  90.5%             91.4%                   19.0
+0.80  91.4%             90.0%                   21.0
+0.90  93.2%             84.1%                   28.9
+0.99  94.3%             55.3%                   90.0
+====  ================  ======================  ============
+
+They cross at about ``rho = 0.78``. Correlation shrinks the winner's curse --
+the mean selection bias falls from 1.53 to 0.15 across that range -- so the
+naive interval recovers, while the conditional one becomes *both wider and
+less valid*, which is not a trade a reader would guess. Above a correlation
+of roughly three quarters this module is the wrong tool and the ordinary
+interval is the better one. With fifty candidates the crossing is much
+further out, because the naive interval has so much further to fall: at
+``rho = 0.5`` it covers 68.2% against the conditional interval's 94.6%.
+
 **And the correction costs nothing when the winner is clear, so it is not a
 tax on every selection.** With one candidate four standard errors ahead of
 nine others, the median conditional width is 4.10 against the naive 3.92 -- a
@@ -461,6 +487,7 @@ def selection_coverage(
     level: float = 0.95,
     paths: int = 4_000,
     seed: int = 0,
+    correlation: float = 0.0,
 ) -> dict[str, float]:
     """Simulate how often each interval covers the *selected* strategy's truth.
 
@@ -468,8 +495,15 @@ def selection_coverage(
     largest, and asks whether each interval contains the true Sharpe *of the
     one that was selected* -- which changes from path to path, and is the
     whole difficulty. Returns the two coverages, the mean selection bias, the
-    mean widths and the fraction of paths on which the conditional lower bound
-    is unbounded.
+    widths and the fraction of paths on which the conditional bound ran off.
+
+    ``correlation`` is an equicorrelation between the candidates' estimates,
+    imposed through a single common factor. It exists to test this module's
+    one real assumption rather than to restate it: the conditional law holds
+    the losers' estimates fixed and treats the winner's as independent of
+    them, which a parameter sweep over neighbouring settings badly violates.
+    Whether that makes the interval conservative or anti-conservative is a
+    question with an answer, and it is not the same answer at both ends.
 
     Here so the numbers in this module's docstring can be reproduced from the
     installed package rather than taken on trust.
@@ -486,10 +520,17 @@ def selection_coverage(
         _finite(f"truths[{index}]", truth)
         _positive(f"deviations[{index}]", deviation)
 
+    if not 0.0 <= correlation < 1.0:
+        raise ValidationError(f"correlation must lie in [0, 1), got {correlation!r}")
+
     generator = np.random.default_rng(seed)
     centres: FloatArray = np.asarray(truths, dtype=np.float64)
     scales: FloatArray = np.asarray(deviations, dtype=np.float64)
-    draws: FloatArray = generator.normal(loc=centres, scale=scales, size=(paths, len(truths)))
+    shocks: FloatArray = generator.standard_normal(size=(paths, len(truths)))
+    if correlation > 0.0:
+        common: FloatArray = generator.standard_normal(size=(paths, 1))
+        shocks = math.sqrt(correlation) * common + math.sqrt(1.0 - correlation) * shocks
+    draws: FloatArray = centres + scales * shocks
 
     naive_hits = 0
     conditional_hits = 0

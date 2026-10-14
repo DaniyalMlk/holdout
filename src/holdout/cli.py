@@ -25,6 +25,7 @@ from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
 from .pairwise import sharpe_difference
 from .pbo import probability_of_backtest_overfitting
+from .selection import selection_inference
 from .sequential import NORMAL_95, confidence_sequence
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
@@ -289,6 +290,59 @@ def _cmd_deflate(args: argparse.Namespace) -> int:
         f"probabilistic:     {result.probabilistic:.3f}  (P[true sharpe > 0], ignoring the search)"
     )
     print(f"deflated:          {result.deflated:.3f}  (the same, after the search)")
+    return 0
+
+
+def _cmd_selected(args: argparse.Namespace) -> int:
+    """Report the winner's record with the selection conditioned on.
+
+    The margin over the runner-up is printed first because it is the number
+    that decides everything else: the whole correction is a function of it,
+    and of nothing about how many candidates there were.
+    """
+    table = _load(args)
+    columns = table.values
+    if columns.shape[1] < 2:
+        raise ValidationError(
+            f"selection inference needs at least two strategies, found {columns.shape[1]}"
+        )
+    root = math.sqrt(args.periods_per_year)
+    estimates = []
+    deviations = []
+    for name in table.names:
+        got = estimate_sharpe(table.column(name))
+        estimates.append(got.value)
+        deviations.append(got.standard_error())
+    inference = selection_inference(estimates, deviations, level=args.level)
+    selected = inference.selected
+    interval = inference.interval
+    runner_up = table.names[
+        max(
+            (index for index in range(len(estimates)) if index != selected.index),
+            key=lambda index: estimates[index],
+        )
+    ]
+    print(f"{columns.shape[1]} strategies over {columns.shape[0]} periods")
+    print(f"selected:          {table.names[selected.index]}")
+    print(f"runner-up:         {runner_up} at {selected.threshold * root:.2f} annualised")
+    print(f"margin:            {selected.margin:.2f} standard errors over the runner-up")
+    print(f"raw sharpe:        {selected.estimate * root:.2f} annualised")
+    print(
+        f"median-unbiased:   {interval.median * root:.2f} annualised"
+        f"  ({inference.shrinkage * root:.2f} lower than the raw estimate)"
+    )
+    width = "unbounded" if not interval.bounded else f"{interval.width * root:.2f} wide"
+    print(
+        f"conditional {args.level:.0%}:  "
+        f"[{interval.lower * root:.2f}, {interval.upper * root:.2f}]  ({width})"
+    )
+    print(
+        f"ignoring the search: [{interval.naive_lower * root:.2f}, "
+        f"{interval.naive_upper * root:.2f}]  "
+        f"({interval.naive_width * root:.2f} wide)"
+    )
+    if interval.bounded:
+        print(f"the search costs a factor of {interval.inflation:.2f} on the width")
     return 0
 
 
@@ -624,6 +678,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="how to count correlated trials (default: eigenvalue)",
     )
     p.set_defaults(func=_cmd_deflate)
+
+    p = sub.add_parser(
+        "selected",
+        help="what the winning strategy's Sharpe is worth, given that it won",
+        description=(
+            "The deflate command asks whether the best of these records is "
+            "significant. This one asks what its Sharpe ratio actually is. The "
+            "winning estimate was drawn from its own sampling distribution "
+            "restricted to the event that it beat every other candidate, so the "
+            "honest interval inverts that truncated law rather than the "
+            "unconditional one. Under a null where every strategy is equally "
+            "good, the ordinary 95% interval on the winner covers its truth "
+            "95% of the time out of two candidates and 31% out of fifty; this "
+            "one covers 95% throughout. What it costs is width, and only when "
+            "the race was close: four standard errors clear of the runner-up, "
+            "the two intervals agree to within five per cent."
+        ),
+    )
+    with_file(p)
+    p.add_argument("--level", type=float, default=0.95, help="confidence level (default: 0.95)")
+    p.set_defaults(func=_cmd_selected)
 
     p = sub.add_parser("pbo", help="probability of backtest overfitting")
     with_file(p)
