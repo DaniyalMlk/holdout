@@ -604,3 +604,20 @@ is that reference's error. An earlier test asserted instead that the worst
 disagreement sat out in the tail, which held against one version of the
 reference and failed against an older one — a fact about the reference's error
 profile rather than about this code, and the one CI failure of the phase.
+
+## Phase 16 — The command line explains itself
+
+- [x] Help text on every option, the seeds especially — every resampling
+      command here is stochastic, so a seed nobody can read is a figure nobody
+      records beside the result
+- [x] The replication counts described by what they buy: the bootstrap count
+      is the floor on a p-value's resolution, the block count enters the split
+      count as a central binomial coefficient, and more sequential
+      replications narrow a standard error rather than move the answer
+- [x] A parametrised sweep that renders `--help` for the root parser and every
+      subcommand, since a help string is expanded only when it is displayed
+- [x] Commands enumerated by walking the parser, recursively, rather than
+      listed by hand
+- [x] A completeness check that every argument carries help at all
+- [x] The sweep verified against the regression it exists for
+- [x] The same sweep in CI against the built wheel
