@@ -615,7 +615,13 @@ def build_parser() -> argparse.ArgumentParser:
     def with_file(p: argparse.ArgumentParser) -> None:
         p.add_argument("file", help="returns CSV: one row per period, one column per strategy")
         p.add_argument("--no-index", action="store_true", help="the CSV has no label column")
-        p.add_argument("--periods-per-year", type=float, default=252.0)
+        p.add_argument(
+            "--periods-per-year",
+            type=float,
+            default=252.0,
+            help="how many rows make a year, which is what annualises a "
+            "Sharpe ratio. Daily by default.",
+        )
 
     p = sub.add_parser(
         "drawdown",
@@ -708,15 +714,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("pbo", help="probability of backtest overfitting")
     with_file(p)
-    p.add_argument("--blocks", type=int, default=16)
+    p.add_argument(
+        "--blocks",
+        type=int,
+        default=16,
+        help="blocks the record is cut into before recombining. The number "
+        "of splits is the central binomial coefficient in this, so sixteen "
+        "is already 12,870 of them.",
+    )
     p.set_defaults(func=_cmd_pbo)
 
     p = sub.add_parser("spa", help="bootstrap tests against a benchmark")
     with_file(p)
     p.add_argument("--benchmark", help="column to test against (default: zero)")
-    p.add_argument("--bootstrap", type=int, default=1000)
-    p.add_argument("--alpha", type=float, default=0.05)
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--bootstrap",
+        type=int,
+        default=1000,
+        help="stationary bootstrap resamples. The p-value cannot resolve below one over this.",
+    )
+    p.add_argument("--alpha", type=float, default=0.05, help="size the test is conducted at")
+    p.add_argument(
+        "--seed", type=int, default=0, help="seed for the resampling, so the p-value reproduces"
+    )
     p.set_defaults(func=_cmd_spa)
 
     p = sub.add_parser(
@@ -736,7 +756,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="max compares each model to the set average, range takes the largest "
         "studentised pair (default: max)",
     )
-    p.add_argument("--bootstrap", type=int, default=1000)
+    p.add_argument(
+        "--bootstrap",
+        type=int,
+        default=1000,
+        help="stationary bootstrap resamples used to eliminate the set",
+    )
     p.add_argument(
         "--alpha",
         type=float,
@@ -744,7 +769,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="a smaller level gives a LARGER set, since this is a confidence "
         "region (default: 0.10, following the paper)",
     )
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="seed for the resampling, so the surviving set reproduces",
+    )
     p.set_defaults(func=_cmd_mcs)
 
     p = sub.add_parser(
@@ -794,8 +824,15 @@ def build_parser() -> argparse.ArgumentParser:
             f"{DEFAULT_TRIM}); it changes the answer, so it is an argument"
         ),
     )
-    p.add_argument("--bootstrap", type=int, default=1000)
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--bootstrap",
+        type=int,
+        default=1000,
+        help="resamples per window, which set the width of the reported band",
+    )
+    p.add_argument(
+        "--seed", type=int, default=0, help="seed for the resampling, so the bands reproduce"
+    )
     p.set_defaults(func=_cmd_stability)
 
     p = sub.add_parser(
@@ -813,13 +850,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--count", type=int, default=None, help="number of rolling windows")
     p.add_argument("--window", type=int, default=None, help="bars per window")
     p.add_argument("--step", type=int, default=1, help="bars between window starts")
-    p.add_argument("--replications", type=int, default=8)
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--replications",
+        type=int,
+        default=8,
+        help="sequential bootstrap replications averaged over. The measured "
+        "gain over uniform sampling is small, so more of them narrows a "
+        "standard error rather than moving the answer.",
+    )
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="seed for the sampling, so the uniqueness figures reproduce",
+    )
     p.set_defaults(func=_cmd_uniqueness)
 
     p = sub.add_parser("sample-data", help="write synthetic parameter sweeps")
-    p.add_argument("--out", default="sample")
-    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--out", default="sample", help="directory to write the generated CSVs into")
+    p.add_argument("--seed", type=int, default=7, help="seed for the generated sweeps")
     p.set_defaults(func=_cmd_sample_data)
     return parser
 

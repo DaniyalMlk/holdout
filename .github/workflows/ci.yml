@@ -57,6 +57,25 @@ jobs:
           cd /tmp
           /tmp/clean/bin/python -c "import holdout; print(holdout.__version__)"
           /tmp/clean/bin/holdout --version
+          # Every command's --help, against the artefact that would be
+          # published. argparse expands help strings through %-formatting at
+          # display time, so a malformed one raises there and nowhere else:
+          # the suite exercises the commands and the commands work. Only
+          # --help is broken, and it is the first thing anybody types.
+          /tmp/clean/bin/holdout --help > /dev/null
+          for sub in $(/tmp/clean/bin/python - <<'PY'
+          import argparse
+          from holdout.cli import build_parser
+          for action in build_parser()._actions:
+              if isinstance(action, argparse._SubParsersAction):
+                  print(" ".join(sorted(action.choices)))
+                  break
+          PY
+          ); do
+            /tmp/clean/bin/holdout "$sub" --help > /dev/null || {
+              echo "holdout $sub --help failed"; exit 1; }
+          done
+          echo "every command printed help"
           /tmp/clean/bin/holdout sample-data --out /tmp/sample
           /tmp/clean/bin/holdout sharpe /tmp/sample/sweep.csv --column ma10_120
           /tmp/clean/bin/holdout deflate /tmp/sample/trending.csv
