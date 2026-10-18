@@ -621,3 +621,28 @@ profile rather than about this code, and the one CI failure of the phase.
 - [x] A completeness check that every argument carries help at all
 - [x] The sweep verified against the regression it exists for
 - [x] The same sweep in CI against the built wheel
+
+## Phase 17 — The evidence goes above the install line
+
+- [x] One script recomputing every cross-check the front page quotes, so the
+      figures in the document and the figures in the code cannot drift apart
+- [x] Six of the seven against a reference sharing no derivation with the
+      library: the published worked example, quadrature of the defining
+      integral, `scipy.stats`, the AR(1) closed form, a combinatorial
+      identity, and `scipy.stats.norm.logsf` out past where the tail itself
+      underflows
+- [x] The seventh the result the library exists for — the best of fifty
+      strategies with no skill at all, scored by both ratios
+- [x] The published figure computed in one place: the paper row runs the
+      worked example rather than restating its arithmetic, after a draft that
+      restated it de-annualised the trial variance and reported a benchmark
+      ten times too small
+- [x] Figures quoted as bounds, never as digits, since where two
+      implementations stop agreeing is a fact about the SciPy and NumPy builds
+      underneath
+- [x] A quadrature bound over the whole range rather than at one convenient
+      `n`, because at `n = 10**6` the reference is the less accurate of the pair
+- [x] The tail checked relatively: at `z = 400` the log tail is about -80000,
+      so an absolute bound would describe the sweep's endpoint instead
+- [x] The two directions of the pin — a figure that moves and a row that is
+      deleted — each confirmed to fail before being relied on

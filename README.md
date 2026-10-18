@@ -14,6 +14,60 @@ section below says which.
 
 See [ROADMAP.md](ROADMAP.md) for the build order.
 
+## What is checked, and against what
+
+That claim is worth only as much as the evidence, so here it is before the
+install line. Six of these seven compare the library against a reference that
+shares no derivation with it; the last is the result that makes the case for
+the library existing at all. All seven are produced by `examples/evidence.py`,
+which runs in CI and exits non-zero if any of them moves:
+
+| Check | Result |
+| --- | --- |
+| Bailey and López de Prado (2014), their worked example end to end | SR0 = 0.1132 and DSR = 0.9004, as published |
+| Expected maximum of n normals against quadrature, n = 2 to 10^6 | agree to 1e-10 |
+| Skewness and kurtosis against scipy.stats, both bias conventions | agree to 1e-12 |
+| Lo's eta(q) against its AR(1) closed form, eight cases | exact |
+| CPCV path count against k/N x C(N, k), every N up to 12 | exact |
+| Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400 | agree to 1e-14 relative, past where the tail itself underflows |
+| 50 pure-noise strategies, best selected, 200 runs | PSR(0) > 95% in 90% of them, DSR > 95% in none |
+
+The figures are bounds rather than digits, deliberately. Two implementations of
+the same quantity agree to within *something*, and where they stop agreeing
+depends on the SciPy and NumPy builds underneath — so a figure quoted to ten
+significant places is a number that happens to be true on the machine that
+measured it. The bound is the claim, and it is the bound the script enforces.
+
+Three rows are worth a second look.
+
+**The quadrature row is quoted as a bound over the whole range for a reason.**
+At `n = 10**6` the reference is the *less* accurate of the pair: computing
+`Phi(z)**999999` multiplies a million nearly-equal factors, and the 1.7e-11
+disagreement there is mostly the quadrature's. Quoting the agreement at one
+convenient `n` would have made the library look better than the comparison can
+actually establish.
+
+**The tail row is checked relatively, not absolutely.** By `z = 400` the log
+tail is about -80000, so an absolute agreement of 1e-11 is a relative agreement
+of 1e-16, and an absolute bound would say more about the largest `z` in the
+sweep than about either implementation. The range matters as much as the bound:
+past `z ~ 38` the upper tail is zero in double precision, `log(1 - cdf)` is
+`-inf`, and only a routine that stays on the log scale throughout has anything
+left to report.
+
+**The last row is the whole argument.** Fifty strategies with no skill
+whatsoever, the best of them selected the way any search selects: the
+probabilistic Sharpe ratio calls that coin flip a discovery in 181 runs out of
+200, and the deflated ratio — which raises the benchmark to what the best of
+fifty unskilled trials would be expected to show — is fooled in none of them.
+
+```bash
+python examples/evidence.py     # all seven, non-zero if a figure moves
+```
+
+Behind them: 604 tests on Python 3.10 through 3.13, with SciPy used in the
+suite as an independent reference and never as an implementation.
+
 ## Install
 
 ```bash
