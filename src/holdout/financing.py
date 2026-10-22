@@ -54,7 +54,13 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .exceptions import ValidationError
-from .series import FloatArray, as_matrix, as_returns, check_periods_per_year
+from .series import (
+    FloatArray,
+    as_matrix,
+    as_returns,
+    check_periods_per_year,
+    constant_floor,
+)
 
 __all__ = [
     "Compounding",
@@ -90,7 +96,7 @@ def _frequency(periods_per_year: float) -> float:
 def _ratio(series: FloatArray, *, name: str) -> tuple[float, float]:
     """Mean and ``ddof=1`` standard deviation, refusing a series with no variance."""
     sd = float(np.std(series, ddof=1))
-    if sd == 0.0 or sd <= np.finfo(np.float64).eps * float(np.max(np.abs(series))):
+    if sd <= constant_floor(series):
         raise ValidationError(f"{name} have zero variance, so the Sharpe ratio is undefined")
     return float(np.mean(series)), sd
 

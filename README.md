@@ -81,7 +81,7 @@ about the BLAS underneath.
 python examples/evidence.py     # all nine, non-zero if a figure moves
 ```
 
-Behind them: 734 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 1,015 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
@@ -205,6 +205,14 @@ all produce a number of the right magnitude that is simply wrong. So:
 - Financing is an input step, applied once where the file is read, and the
   report says when a rate is in force -- an excess Sharpe ratio and a
   total-return one are different numbers that look alike.
+- A series that does not move is refused, by a test that is *relative* to the
+  series' own magnitude. The standard deviation of a constant array is not
+  exactly zero in floating point, so `sd == 0` does not fire and the ratio
+  comes back around 1e15 -- a number that wins every comparison it is entered
+  into, which is the worst shape a bug can take here. The threshold is eight
+  multiples of machine epsilon, which is above the rounding a constant series
+  leaves (under four, measured across lengths and magnitudes) and far below
+  any variation a return series could have.
 
 The same principle drives the validation: every number in this README was
 measured, and where a published figure did not reproduce from its own printed

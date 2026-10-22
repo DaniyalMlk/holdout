@@ -17,15 +17,45 @@ from numpy.typing import ArrayLike, NDArray
 from .exceptions import InsufficientDataError, ValidationError
 
 __all__ = [
+    "CONSTANT_TOLERANCE",
     "FloatArray",
     "as_matrix",
     "as_returns",
     "check_labels",
     "check_periods_per_year",
     "check_probability",
+    "constant_floor",
 ]
 
 FloatArray = NDArray[np.float64]
+
+#: Multiple of machine epsilon below which a series is treated as constant. The
+#: test has to be *relative*, because the standard deviation of a constant array
+#: is not exactly zero: subtracting the mean leaves rounding of order
+#: ``eps * level``. On 0.001 repeated a thousand times numpy returns 4.3e-19,
+#: and an absolute guard at zero does not fire — the Sharpe ratio comes back as
+#: 2.3e15 and every number downstream is arithmetic on rounding error.
+#:
+#: Eight rather than one, because one is not enough. Over constant series at
+#: ten lengths and nine magnitudes the residue reaches 1.95 times ``eps *
+#: level``, so a guard at one multiple fires for some ``(length, value)`` pairs
+#: and not for others — which is why this was caught in one module and missed
+#: in five. Eight has margin over that and costs nothing at the other end: a
+#: series whose standard deviation is 1e-13 of its own level is still accepted,
+#: and no real return series is anywhere near it.
+CONSTANT_TOLERANCE = 8.0
+
+
+def constant_floor(values: FloatArray) -> float:
+    """Standard deviation below which ``values`` is rounding rather than variation.
+
+    Relative to the series' own magnitude, so the threshold means the same
+    thing whether returns are quoted as fractions or in basis points. The
+    fallback of one for an all-zero series keeps the floor positive, so that
+    zeros are refused rather than compared against a floor of zero.
+    """
+    scale = float(np.max(np.abs(values))) if values.size else 0.0
+    return CONSTANT_TOLERANCE * float(np.finfo(np.float64).eps) * (scale or 1.0)
 
 
 def _first_bad(values: FloatArray) -> tuple[int, ...]:

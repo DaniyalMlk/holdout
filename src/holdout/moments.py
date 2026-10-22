@@ -25,7 +25,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .exceptions import InsufficientDataError, ValidationError
-from .series import FloatArray, as_returns
+from .series import FloatArray, as_returns, constant_floor
 
 __all__ = ["Moments", "autocorrelation", "kurtosis", "moments", "skewness"]
 
@@ -35,7 +35,7 @@ def _central(x: FloatArray) -> tuple[float, float, float]:
     m2 = float(np.mean(d**2))
     m3 = float(np.mean(d**3))
     m4 = float(np.mean(d**4))
-    if m2 <= 0.0 or m2 <= (np.finfo(np.float64).eps * float(np.max(np.abs(x)))) ** 2:
+    if m2 <= constant_floor(x) ** 2:
         raise ValidationError("the series has zero variance, so its shape moments are undefined")
     return m2, m3, m4
 

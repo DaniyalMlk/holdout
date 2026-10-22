@@ -33,7 +33,13 @@ from numpy.typing import ArrayLike
 
 from .exceptions import InsufficientDataError, ValidationError
 from .moments import autocorrelation, moments
-from .series import FloatArray, as_returns, check_periods_per_year, check_probability
+from .series import (
+    FloatArray,
+    as_returns,
+    check_periods_per_year,
+    check_probability,
+    constant_floor,
+)
 
 __all__ = [
     "SharpeRatio",
@@ -123,8 +129,13 @@ def sharpe_ratio(
     ppy = check_periods_per_year(periods_per_year)
     excess = _excess(returns, risk_free)
     sd = float(np.std(excess, ddof=1))
-    if sd == 0.0 or sd <= np.finfo(np.float64).eps * float(np.max(np.abs(excess))):
-        raise ValidationError("excess returns have zero variance, so the Sharpe ratio is undefined")
+    if sd <= constant_floor(excess):
+        raise ValidationError(
+            f"excess returns have zero variance (standard deviation {sd:.4g}, within rounding "
+            f"of zero for a series of magnitude {float(np.max(np.abs(excess))):.4g}), so the "
+            "Sharpe ratio is undefined; computed from this it would come back as a very "
+            "large number rather than as an error"
+        )
     sr = float(np.mean(excess)) / sd
     return sr * math.sqrt(ppy) if ppy is not None else sr
 
