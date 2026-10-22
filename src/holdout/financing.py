@@ -53,6 +53,7 @@ from typing import Literal
 import numpy as np
 from numpy.typing import ArrayLike
 
+from .deflated import expected_maximum_sharpe
 from .exceptions import ValidationError
 from .series import (
     FloatArray,
@@ -66,13 +67,16 @@ __all__ = [
     "Compounding",
     "ExcessConvention",
     "FinancingImpact",
+    "SelectionUnderFinancing",
     "annual_rate",
     "excess_columns",
     "excess_returns",
     "financing_impact",
+    "financing_shifts",
     "levered_excess",
     "levered_returns",
     "period_rate",
+    "selection_under_financing",
 ]
 
 Compounding = Literal["simple", "compound"]
@@ -353,5 +357,141 @@ def financing_impact(
         mean_rate=float(np.mean(rf)),
         volatility=net_sd,
         observations=int(x.size),
+        periods_per_year=ppy,
+    )
+
+
+def _column_ratios(
+    x: FloatArray, rate: float | ArrayLike, *, convention: ExcessConvention
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    """Per-column Sharpe ratios gross and excess, and the shift between them.
+
+    Column by column rather than with an axis argument, so that a column with
+    no variance names itself rather than quietly becoming an infinity that
+    wins every comparison it is in.
+    """
+    net = excess_columns(x, rate, convention=convention)
+    gross = np.empty(x.shape[1], dtype=np.float64)
+    after = np.empty(x.shape[1], dtype=np.float64)
+    for column in range(x.shape[1]):
+        gross_mean, gross_sd = _ratio(x[:, column], name=f"returns[:, {column}]")
+        net_mean, net_sd = _ratio(net[:, column], name=f"excess returns[:, {column}]")
+        gross[column] = gross_mean / gross_sd
+        after[column] = net_mean / net_sd
+    return gross, after, gross - after
+
+
+def financing_shifts(
+    returns: ArrayLike,
+    rate: float | ArrayLike,
+    *,
+    convention: ExcessConvention = "arithmetic",
+) -> FloatArray:
+    """Per-column Sharpe shift from financing: ``rate / sigma_i``, one entry per strategy.
+
+    This is what the whole effect is made of. One cash rate does not move a
+    family of strategies by one amount — the shift is the rate over each
+    column's own volatility, so it is largest for the least volatile of them.
+    Everything in :func:`selection_under_financing` follows from the spread of
+    these numbers rather than from their average.
+
+    Computed as the difference of the two ratios rather than as the quotient,
+    so that it stays right for a rate series, where the volatility changes
+    under the conversion and the quotient is only an approximation.
+    """
+    result: FloatArray = _column_ratios(as_matrix(returns), rate, convention=convention)[2]
+    return result
+
+
+@dataclass(frozen=True)
+class SelectionUnderFinancing:
+    """Which strategy wins, before and after, and what the field did around it.
+
+    Attributes:
+        gross_best: Column with the highest Sharpe ratio on total returns.
+        excess_best: Column with the highest Sharpe ratio on an excess basis.
+        gross_ratio: The gross winner's gross Sharpe ratio, per period.
+        excess_ratio: The excess winner's excess Sharpe ratio, per period.
+        displaced_ratio: The *gross* winner's ratio on an excess basis, which
+            is what a caller who selected before subtracting financing is
+            actually holding.
+        gross_dispersion: Cross-sectional variance of the trial Sharpe ratios
+            on total returns. This is the quantity the deflated Sharpe ratio's
+            benchmark is computed from.
+        excess_dispersion: The same after the conversion.
+        trials: Number of columns.
+        periods_per_year: Annualisation frequency, or ``None``.
+    """
+
+    gross_best: int
+    excess_best: int
+    gross_ratio: float
+    excess_ratio: float
+    displaced_ratio: float
+    gross_dispersion: float
+    excess_dispersion: float
+    trials: int
+    periods_per_year: float | None = None
+
+    @property
+    def moved(self) -> bool:
+        """Whether financing changed which strategy looks best."""
+        return self.gross_best != self.excess_best
+
+    @property
+    def displacement(self) -> float:
+        """Excess Sharpe ratio given up by selecting before subtracting financing.
+
+        Zero when the winner did not move, and never negative: the excess
+        winner is the maximum on an excess basis by construction.
+        """
+        return self.excess_ratio - self.displaced_ratio
+
+    @property
+    def benchmark_gross(self) -> float:
+        """The deflated Sharpe ratio's benchmark for this field, on total returns."""
+        return expected_maximum_sharpe(self.trials, self.gross_dispersion)
+
+    @property
+    def benchmark_excess(self) -> float:
+        """The same benchmark after the conversion, which is not the same number."""
+        return expected_maximum_sharpe(self.trials, self.excess_dispersion)
+
+
+def selection_under_financing(
+    returns: ArrayLike,
+    rate: float | ArrayLike,
+    *,
+    convention: ExcessConvention = "arithmetic",
+    periods_per_year: float | None = None,
+) -> SelectionUnderFinancing:
+    """Compare the selection a family of trials supports, gross and in excess of financing.
+
+    The ranking by Sharpe ratio survives the conversion exactly when every
+    column's shift is the same, which needs their *sample* standard deviations
+    to coincide — not their population ones, which is the most a family can be
+    designed for. So the answer is a measurement rather than a deduction, and
+    both the winner and the field it won against are reported.
+
+    Raises:
+        ValidationError: If any column has no variance, or the rate does not
+            line up with the returns.
+    """
+    x = as_matrix(returns, min_columns=1)
+    ppy = check_periods_per_year(periods_per_year)
+    gross, after, _ = _column_ratios(x, rate, convention=convention)
+    best_gross = int(np.argmax(gross))
+    best_excess = int(np.argmax(after))
+    spread = 0.0 if x.shape[1] < 2 else float(np.var(gross, ddof=1))
+    net_spread = 0.0 if x.shape[1] < 2 else float(np.var(after, ddof=1))
+    return SelectionUnderFinancing(
+        gross_best=best_gross,
+        excess_best=best_excess,
+        gross_ratio=float(gross[best_gross]),
+        excess_ratio=float(after[best_excess]),
+        displaced_ratio=float(after[best_gross]),
+        gross_dispersion=spread,
+        excess_dispersion=net_spread,
+        trials=int(x.shape[1]),
         periods_per_year=ppy,
     )
