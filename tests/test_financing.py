@@ -17,6 +17,8 @@ from holdout import (
     annual_rate,
     excess_columns,
     excess_returns,
+    expected_maximum_sharpe,
+    financing_impact,
     levered_excess,
     levered_returns,
     period_rate,
@@ -410,3 +412,102 @@ def test_leverage_must_be_positive_and_finite(bad: float) -> None:
 def test_spread_must_be_finite() -> None:
     with pytest.raises(ValidationError, match="spread must be finite"):
         levered_returns(_series(16), leverage=2.0, rate=0.0, spread=math.nan)
+
+
+# --- what the conversion cost ----------------------------------------------
+
+
+def test_a_constant_rate_shift_is_exactly_the_closed_form() -> None:
+    """``rate / sigma``, with nothing left over.
+
+    Subtracting a constant moves the mean and leaves the standard deviation
+    alone, so the Sharpe shift *is* the ratio, and ``residual`` is zero rather
+    than small. It is asserted at 1e-15 and measures 1e-17.
+    """
+    x = _series()
+    rf = period_rate(0.05, PPY, compounding="compound")
+    impact = financing_impact(x, rf, periods_per_year=PPY)
+    assert impact.shift == pytest.approx(impact.predicted_shift, rel=0.0, abs=1e-15)
+    assert abs(impact.residual) < 1e-15
+    assert impact.mean_rate == rf
+    assert impact.observations == x.size
+    assert impact.gross > impact.excess
+
+
+def test_the_financing_haircut_is_about_a_third_of_a_sharpe_ratio() -> None:
+    """The number this module exists for, on a decade of 16%-volatility returns.
+
+    0.31 of annualised Sharpe at a 5% cash rate. The comparison worth making
+    is against the haircut this library already computes, so the test computes
+    that one too rather than quoting it: the deflated Sharpe ratio's benchmark
+    for the best of fifty trials whose Sharpe ratios are dispersed by sampling
+    error alone. Financing comes to between a third and two thirds of it.
+    Both are the same kind of adjustment to the same number, and only one of
+    them is usually reported.
+    """
+    x = _series()
+    impact = financing_impact(
+        x, period_rate(0.05, PPY, compounding="compound"), periods_per_year=PPY
+    )
+    assert 0.30 < impact.annualised_shift < 0.32
+    multiplicity = expected_maximum_sharpe(50, 1.0 / x.size) * math.sqrt(PPY)
+    assert 0.6 < multiplicity < 0.8
+    assert 1.0 / 3.0 < impact.annualised_shift / multiplicity < 2.0 / 3.0
+    annual_volatility = float(np.std(x, ddof=1)) * math.sqrt(PPY)
+    assert 0.15 < annual_volatility < 0.16
+    # The simple convention would put the same haircut 2.4% higher, which is
+    # the compounding difference showing up where it is finally visible.
+    simple = financing_impact(x, period_rate(0.05, PPY, compounding="simple"), periods_per_year=PPY)
+    assert 1.02 < simple.annualised_shift / impact.annualised_shift < 1.03
+
+
+def test_a_moving_rate_leaves_a_residual_the_closed_form_misses() -> None:
+    """Because it moves the standard deviation too, which the closed form assumes it does not.
+
+    Over a cash rate sweeping 0% to 6%, the residual is about 1e-04 of the
+    shift: the closed form is a good approximation and not an identity, and
+    the point of reporting both is that the gap says which it is.
+    """
+    x = _series()
+    rf = _ramp(x.size, 0.0, 0.06) / PPY
+    impact = financing_impact(x, rf, periods_per_year=PPY)
+    assert impact.residual != 0.0
+    assert 1e-05 < abs(impact.residual / impact.shift) < 1e-03
+    assert impact.mean_rate == pytest.approx(float(np.mean(rf)))
+
+
+def test_the_two_conventions_disagree_about_the_residual_and_not_the_shift() -> None:
+    x = _series()
+    rf = _ramp(x.size, 0.0, 0.06) / PPY
+    arithmetic = financing_impact(x, rf, periods_per_year=PPY)
+    geometric = financing_impact(x, rf, convention="geometric", periods_per_year=PPY)
+    assert geometric.shift == pytest.approx(arithmetic.shift, rel=1e-03)
+    assert abs(geometric.residual) > 1e-07
+    assert geometric.residual * arithmetic.residual < 0.0
+
+
+def test_a_zero_rate_takes_nothing() -> None:
+    x = _series(512)
+    impact = financing_impact(x, 0.0, periods_per_year=PPY)
+    assert impact.shift == 0.0
+    assert impact.predicted_shift == 0.0
+    assert impact.gross == impact.excess
+
+
+def test_annualised_shift_needs_a_frequency() -> None:
+    impact = financing_impact(_series(64), 0.0001)
+    assert impact.periods_per_year is None
+    with pytest.raises(ValidationError, match="no annual scale"):
+        _ = impact.annualised_shift
+
+
+def test_financing_impact_refuses_a_series_with_no_variance() -> None:
+    with pytest.raises(ValidationError, match="returns have zero variance"):
+        financing_impact(np.full(32, 0.001), 0.0001)
+
+
+def test_financing_impact_refuses_a_rate_that_flattens_the_excess_series() -> None:
+    """A rate series equal to the returns leaves nothing with any variance to divide by."""
+    x = _series(64)
+    with pytest.raises(ValidationError, match="excess returns have zero variance"):
+        financing_impact(x, x)
