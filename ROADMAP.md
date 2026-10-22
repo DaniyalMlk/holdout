@@ -646,3 +646,57 @@ profile rather than about this code, and the one CI failure of the phase.
       so an absolute bound would describe the sweep's endpoint instead
 - [x] The two directions of the pin — a figure that moves and a row that is
       deleted — each confirmed to fail before being relied on
+
+## Phase 18 — The record is not in excess of anything
+
+Every statistic here is stated for returns in excess of a financing rate, and
+every entry point defaulted to zero. The parameter that would have changed
+that was reachable from three functions out of the library's hundred and from
+no command at all, and there was no conversion from a rate as it is quoted to
+a rate as the formulas need it.
+
+- [x] A per-period rate from an annualised one, simply or compounded, with the
+      inverse beside it, since a conversion that cannot be undone is a
+      conversion nobody can check
+- [x] Computed as `expm1(log1p(a) / n)` and not as the direct root, which
+      costs a small rate eleven of its digits to the cancellation in
+      `1 + tiny - 1` and fails its own round trip by 4e-12
+- [x] Excess returns under both conventions, against a constant rate or a rate
+      series, for a single record or for a matrix of strategies sharing one
+      cash rate
+- [x] The conventions' difference measured rather than assumed to matter: for
+      a constant rate the geometric excess is the arithmetic one times a
+      positive constant, so no Sharpe ratio can tell them apart, and only a
+      rate that moves separates them
+- [x] The levered position, where a Sharpe ratio is untouched by leverage at
+      no spread and falls by `(1 - 1/turns) * spread / sigma` otherwise, both
+      asserted as identities
+- [x] The borrowed fraction floored at zero below one turn, where the position
+      lends and pays nobody a spread
+- [x] The haircut reported with the closed form and the residual beside it, so
+      that the gap between them says whether the closed form is exact here
+- [x] `--risk-free` on every command that reads a return series, converted
+      where the file is read rather than in each command, and announced in the
+      output because an excess ratio and a total-return ratio look alike
+- [x] A `financing` command putting the two haircuts in the same units on the
+      same page, which is the comparison the phase exists to make
+- [x] Both new rows on the front page, with the result row quoted as bands
+      rather than digits — the effective trial count comes off an
+      eigendecomposition whose eigenvalues sit exactly on the integer where
+      the estimator steps
+- [x] Seven ways of breaking the module confirmed to fail the suite before any
+      of its guards were relied on
+
+What it came to on the shipped sweep: a deflated Sharpe ratio of 0.971 on the
+returns as reported and 0.644 in excess of a 5% cash rate, with the benchmark
+the search earns unmoved. The financing haircut is 0.47 and the search's is
+0.46, so the adjustment nobody reports is the larger of the two, and 0.971
+reads as survival where 0.644 does not.
+
+Two bugs in the new command came out of driving it over the wire rather than
+calling into it. It reported the spread's cost as a rate on an annual scale
+where a ratio belonged — what makes a given-up return into a Sharpe ratio is
+dividing by a volatility, and the volatility is per strategy, so no single
+number in a header could have carried it. And the comparison against the
+search's own haircut was gated on the number of rows printed, so asking for one
+strategy by name silently dropped the row the command exists for.

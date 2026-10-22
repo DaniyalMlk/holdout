@@ -52,14 +52,21 @@ from scipy import integrate, stats
 
 from holdout import (
     deflate_trials,
+    effective_number_of_trials,
+    excess_columns,
+    excess_returns,
     expected_maximum_normal,
+    financing_impact,
     kurtosis,
     log_upper_tail,
     number_of_paths,
+    period_rate,
     serial_correlation_factor,
     sharpe_ratio,
     skewness,
+    trial_correlation,
 )
+from holdout.synthetic import crossover_sweep
 
 #: The two figures Bailey and López de Prado publish for their worked example,
 #: in "The Deflated Sharpe Ratio" (2014).
@@ -282,6 +289,93 @@ def noise_selected_as_a_discovery() -> tuple[Check, int, int, int]:
     return check, psr_hits, dsr_hits, runs
 
 
+def the_excess_conventions_agree_for_a_constant_rate() -> Check:
+    """A closed-form identity, checked as one.
+
+    ``(1 + r) / (1 + rf) - 1`` is ``(r - rf) / (1 + rf)``: for a constant rate
+    the geometric excess return is the arithmetic one times a positive
+    constant, and a Sharpe ratio does not see positive constants. So the choice
+    of convention cannot move any ratio of a mean to a standard deviation in
+    this library, and what is left is floating-point noise rather than an
+    approximation error. Only a rate that varies separates the two, and then in
+    the fourth decimal place.
+
+    Reported relatively. The absolute disagreement depends on how large the
+    ratio happens to be, which is a fact about the sample rather than about the
+    identity: the same five rates give 4e-16 to 1e-14 absolute while staying
+    inside 3e-13 relative. For scale, implementing the geometric convention
+    wrongly moves this by ten orders of magnitude or more, so a bound of 1e-12
+    is loose for the arithmetic and tight for the mistake.
+    """
+    rng = np.random.default_rng(20261022)
+    returns = rng.normal(0.0004, 0.01, 2520)
+    worst = 0.0
+    for annual in (0.0025, 0.01, 0.05, 0.12, 0.40):
+        rate = period_rate(annual, 252.0, compounding="compound")
+        arithmetic = sharpe_ratio(excess_returns(returns, rate))
+        geometric = sharpe_ratio(excess_returns(returns, rate, convention="geometric"))
+        worst = max(worst, abs(arithmetic - geometric) / abs(arithmetic))
+    return Check(
+        label="The two excess-return conventions, constant rate, five rates to 40%",
+        measured=worst,
+        bound=1e-12,
+        rendered="agree to 1e-12 relative, which is the identity they are",
+    )
+
+
+def financing_against_multiplicity() -> Check:
+    """The second row that is a result rather than a cross-check.
+
+    The noise row shows the deflated Sharpe ratio refusing a winner that has no
+    edge. This one shows a winner that *does* have an edge, is selected out of
+    thirty trials, survives the deflation comfortably on the returns as
+    reported, and does not survive it once the record is put in excess of a 5%
+    cash rate. Nothing about the search changed: the benchmark the search earns
+    is the same to three decimal places either way. What changed is the number
+    being judged against it.
+
+    The trials are counted by the effective number rather than by the thirty
+    columns, because thirty variants of one crossover rule are not thirty
+    independent trials and the library says so itself; the eigenvalue estimator
+    puts them at 8.0. Counting all thirty deflates harder and gives 0.899
+    against 0.402, the same conclusion from a benchmark the library would not
+    defend.
+
+    The bound is on the pair of verdicts, not on a figure: the gross deflated
+    ratio must read as a discovery and the excess one must not. If either
+    stops being true the row is wrong and the script says so.
+    """
+    sweep = crossover_sweep(trend=0.0006, seed=7)
+    gross = sweep.table.values
+    rate = period_rate(0.05, 252.0, compounding="compound")
+    net = excess_columns(gross, rate)
+    trials = effective_number_of_trials(trial_correlation(gross), method="eigenvalue")
+    before = deflate_trials(gross, n_trials=trials)
+    after = deflate_trials(net, n_trials=trials)
+    root = sqrt(252.0)
+    haircut = financing_impact(
+        gross[:, before.selected], rate, periods_per_year=252.0
+    ).annualised_shift
+    search = before.expected_maximum * root
+    # Bands rather than digits, for the usual reason and one specific to this
+    # row: the effective trial count comes off an eigendecomposition, the
+    # eigenvalue estimator steps when an eigenvalue crosses an integer, and
+    # this sweep's eigenvalues sit on one (8.0 to fifteen places). Quoting
+    # 0.971 would be quoting a figure a different BLAS could move in the third
+    # decimal, which is the front page going red on somebody else's commit.
+    # The bands below survive a trial count anywhere between six and ten.
+    claims = (before.deflated > 0.95, after.deflated < 0.70, haircut > search)
+    return Check(
+        label=("30 crossover trials with a real edge, best selected, before and after financing"),
+        measured=float(claims.count(False)),
+        bound=0.0,
+        rendered=(
+            "DSR clears 0.95 gross and falls below 0.70 in excess of 5%, "
+            "the financing haircut exceeding the search's own"
+        ),
+    )
+
+
 def main() -> dict[str, object]:
     """Run every check, print the table, and return the figures."""
     noise, psr_hits, dsr_hits, runs = noise_selected_as_a_discovery()
@@ -292,7 +386,9 @@ def main() -> dict[str, object]:
         serial_correlation_against_closed_form(),
         path_count_against_the_identity(),
         log_tail_against_scipy(),
+        the_excess_conventions_agree_for_a_constant_rate(),
         noise,
+        financing_against_multiplicity(),
     ]
 
     print("What is checked, and against what")

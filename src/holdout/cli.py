@@ -12,6 +12,7 @@ import math
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from statistics import NormalDist
 
@@ -21,6 +22,13 @@ from . import __version__
 from .deflated import deflate_trials, minimum_track_record_length, probabilistic_sharpe_ratio
 from .drawdown import assess_drawdown
 from .exceptions import HoldoutError, ValidationError
+from .financing import (
+    ExcessConvention,
+    excess_columns,
+    financing_impact,
+    levered_returns,
+    period_rate,
+)
 from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
 from .pairwise import sharpe_difference
@@ -60,7 +68,31 @@ def _table(rows: list[list[str]], header: list[str]) -> str:
 
 
 def _load(args: argparse.Namespace) -> ReturnTable:
-    return read_returns_csv(args.file, index=not args.no_index)
+    """Read the returns CSV, in excess of financing when a rate was given.
+
+    The conversion happens here, once, rather than inside each command, so
+    that a rate supplied on the command line reaches every figure that command
+    prints instead of only the ones that happened to be threaded for it. When
+    a rate is in force the first line of output says so, because a Sharpe
+    ratio on an excess basis and one on a total-return basis are different
+    numbers and nothing else in the report distinguishes them.
+
+    The excess-return convention is not an option here. For a constant rate it
+    cannot move any ratio of a mean to a standard deviation (see
+    :mod:`holdout.financing`), so offering the choice on every command would
+    be offering a switch that does nothing. ``holdout financing`` exposes it,
+    where it is the subject rather than an input.
+    """
+    table = read_returns_csv(args.file, index=not args.no_index)
+    annual = float(getattr(args, "risk_free", 0.0))
+    if annual == 0.0:
+        return table
+    rate = period_rate(annual, args.periods_per_year, compounding=args.financing_compounding)
+    print(
+        f"in excess of {annual:.2%} annualised financing, "
+        f"{args.financing_compounding} ({rate:.6g} per period)"
+    )
+    return replace(table, values=excess_columns(table.values, rate))
 
 
 def _years(periods: float, ppy: float) -> str:
@@ -263,6 +295,86 @@ def _cmd_sharpe(args: argparse.Namespace) -> int:
     header = ["strategy", "sharpe", "95% interval", "lo-adj", "skew", "kurt", "psr(0)", "min track"]
     print(f"{table.values.shape[0]} periods at {ppy:g} per year (annualised figures)\n")
     print(_table(rows, header))
+    return 0
+
+
+def _cmd_financing(args: argparse.Namespace) -> int:
+    """Both haircuts, side by side, which is the only reason this command exists.
+
+    Every other command reads the CSV through ``_load`` and so works on an
+    excess basis silently. This one needs the gross series as well as the
+    excess one, so it reads the file itself and does the conversion in view.
+    """
+    if args.risk_free == 0.0:
+        raise ValidationError(
+            "--risk-free is what this command reports on; give a non-zero annualised "
+            "rate, as a fraction (0.05 for five per cent)"
+        )
+    table = read_returns_csv(args.file, index=not args.no_index)
+    ppy = args.periods_per_year
+    root = math.sqrt(ppy)
+    rate = period_rate(args.risk_free, ppy, compounding=args.financing_compounding)
+    spread = period_rate(args.spread, ppy, compounding=args.financing_compounding)
+    convention: ExcessConvention = args.convention
+    names = [args.column] if args.column else table.names
+    rows = []
+    for name in names:
+        series = table.column(name)
+        if args.leverage != 1.0:
+            series = levered_returns(series, leverage=args.leverage, rate=rate, spread=spread)
+        impact = financing_impact(series, rate, convention=convention, periods_per_year=ppy)
+        rows.append(
+            [
+                name,
+                f"{impact.gross * root:+.3f}",
+                f"{impact.excess * root:+.3f}",
+                f"{impact.annualised_shift:.3f}",
+                f"{impact.predicted_shift * root:.3f}",
+                f"{impact.residual * root:+.1e}",
+            ]
+        )
+    print(
+        f"{table.values.shape[0]} periods at {ppy:g} per year, "
+        f"{args.risk_free:.2%} annualised financing, {args.financing_compounding} "
+        f"({rate:.6g} per period), {convention} excess"
+    )
+    if args.leverage != 1.0:
+        # Below one turn nothing is borrowed, so the borrowed fraction is zero
+        # rather than the negative number (1 - 1/L) would give. And what the
+        # spread costs is a *return*: dividing it by a volatility is what makes
+        # it a Sharpe ratio, and the volatility is per column, so the effect on
+        # the ratio shows up in the excess column rather than in this line.
+        borrowed = max(0.0, 1.0 - 1.0 / args.leverage)
+        print(
+            f"at {args.leverage:g} turns of leverage funded {args.spread:.2%} over that rate, "
+            f"giving up {borrowed * args.spread:.2%} of return a year before the ratio is taken"
+        )
+    print()
+    print(
+        _table(
+            rows,
+            ["strategy", "gross", "excess", "financing", "rate/vol", "residual"],
+        )
+    )
+    print(
+        "\nThe financing column is what the conversion took, annualised. rate/vol is the\n"
+        "closed form for it, exact when the rate is constant, and residual is what the\n"
+        "closed form missed -- zero for a constant rate, the rate's own variation\n"
+        "otherwise."
+    )
+    # Deliberately the whole table, not the --column selection: the search that
+    # earns the haircut is the one that produced every column, so it is reported
+    # whenever the file holds more than one of them.
+    if table.values.shape[1] >= 2:
+        columns = table.values
+        multiplicity = deflate_trials(columns).expected_maximum * root
+        worst = max(float(r[3]) for r in rows)
+        print(
+            f"\nFor comparison, the haircut the search itself earns over {columns.shape[1]} "
+            f"trials is\n{multiplicity:.3f} annualised. The largest financing haircut above is "
+            f"{worst:.3f}. They are\nadjustments of the same kind to the same number; only one "
+            "of them is usually reported."
+        )
     return 0
 
 
@@ -622,6 +734,27 @@ def build_parser() -> argparse.ArgumentParser:
             help="how many rows make a year, which is what annualises a "
             "Sharpe ratio. Daily by default.",
         )
+        p.add_argument(
+            "--risk-free",
+            type=float,
+            default=0.0,
+            metavar="RATE",
+            help="annualised financing rate to put the returns in excess of, as "
+            "a fraction: 0.05 for five per cent. Zero by default, and that "
+            "default is not neutral -- it overstates every Sharpe ratio below by "
+            "the rate divided by the volatility, which at 5 per cent cash and 16 "
+            "per cent volatility is 0.31.",
+        )
+        p.add_argument(
+            "--financing-compounding",
+            choices=("simple", "compound"),
+            default="compound",
+            help="how the annualised rate becomes a per-period one: 'compound' "
+            "takes the period-count root so that a year of it reproduces the "
+            "rate, 'simple' divides. They differ by about 2 per cent of the rate "
+            "at daily frequency, so this moves the haircut and not the sign of "
+            "anything.",
+        )
 
     p = sub.add_parser(
         "drawdown",
@@ -669,6 +802,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="the record length the band is narrowest at (default: the length given)",
     )
     p.set_defaults(func=_cmd_watch)
+
+    p = sub.add_parser(
+        "financing",
+        help="what putting the record on an excess basis costs",
+        description=(
+            "Every other command here asks what a search was worth. This one asks "
+            "what the record was worth before the search is considered at all: a "
+            "Sharpe ratio taken on total returns rather than returns in excess of "
+            "financing is too high by the rate over the volatility, which at a 5 "
+            "per cent cash rate and 16 per cent volatility is 0.31 annualised -- "
+            "between a third and two thirds of the haircut fifty trials earn, from "
+            "a line nobody reports. Leverage is the other half: a Sharpe ratio is "
+            "untouched by it only when the borrowing is at the financing rate "
+            "exactly, and falls by (1 - 1/turns) times the spread over the "
+            "volatility when it is not."
+        ),
+    )
+    with_file(p)
+    p.add_argument("--column", help="only this strategy")
+    p.add_argument(
+        "--spread",
+        type=float,
+        default=0.0,
+        metavar="RATE",
+        help="annualised spread over the financing rate that the borrowed part of a "
+        "levered position pays, as a fraction. Ignored below one turn, where the "
+        "position lends rather than borrows and so pays no spread.",
+    )
+    p.add_argument(
+        "--leverage",
+        type=float,
+        default=1.0,
+        metavar="TURNS",
+        help="turns of the asset held against one of equity. One by default, which "
+        "borrows nothing.",
+    )
+    p.add_argument(
+        "--convention",
+        choices=("arithmetic", "geometric"),
+        default="arithmetic",
+        help="'arithmetic' subtracts the rate, 'geometric' divides by one plus it. "
+        "For a constant rate the two differ by a positive constant factor and so "
+        "cannot move any ratio of a mean to a standard deviation; only a rate that "
+        "moves separates them, and then in the fourth decimal place.",
+    )
+    p.set_defaults(func=_cmd_financing)
 
     p = sub.add_parser("sharpe", help="Sharpe ratio inference for each column")
     with_file(p)

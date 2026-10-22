@@ -17,10 +17,12 @@ See [ROADMAP.md](ROADMAP.md) for the build order.
 ## What is checked, and against what
 
 That claim is worth only as much as the evidence, so here it is before the
-install line. Six of these seven compare the library against a reference that
-shares no derivation with it; the last is the result that makes the case for
-the library existing at all. All seven are produced by `examples/evidence.py`,
-which runs in CI and exits non-zero if any of them moves:
+install line. Six of these nine compare the library against a reference that
+shares no derivation with it, one is an identity the library has to hold
+against itself, and the last two are results rather than checks: they are the
+case for the library existing at all. All nine are produced by
+`examples/evidence.py`, which runs in CI and exits non-zero if any of them
+moves:
 
 | Check | Result |
 | --- | --- |
@@ -30,7 +32,9 @@ which runs in CI and exits non-zero if any of them moves:
 | Lo's eta(q) against its AR(1) closed form, eight cases | exact |
 | CPCV path count against k/N x C(N, k), every N up to 12 | exact |
 | Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400 | agree to 1e-14 relative, past where the tail itself underflows |
+| The two excess-return conventions, constant rate, five rates to 40% | agree to 1e-12 relative, which is the identity they are |
 | 50 pure-noise strategies, best selected, 200 runs | PSR(0) > 95% in 90% of them, DSR > 95% in none |
+| 30 crossover trials with a real edge, best selected, before and after financing | DSR clears 0.95 gross and falls below 0.70 in excess of 5%, the financing haircut exceeding the search's own |
 
 The figures are bounds rather than digits, deliberately. Two implementations of
 the same quantity agree to within *something*, and where they stop agreeing
@@ -55,17 +59,29 @@ past `z ~ 38` the upper tail is zero in double precision, `log(1 - cdf)` is
 `-inf`, and only a routine that stays on the log scale throughout has anything
 left to report.
 
-**The last row is the whole argument.** Fifty strategies with no skill
+**The noise row is the whole argument.** Fifty strategies with no skill
 whatsoever, the best of them selected the way any search selects: the
 probabilistic Sharpe ratio calls that coin flip a discovery in 181 runs out of
 200, and the deflated ratio — which raises the benchmark to what the best of
 fifty unskilled trials would be expected to show — is fooled in none of them.
 
+**The last row is the argument turned the other way round.** Thirty crossover
+rules on a market that genuinely trends, so there is something to find, and the
+best of them clears the deflation comfortably on the returns as reported. Put
+the same record in excess of a 5% financing rate and it does not: the deflated
+ratio falls from above 0.95 to below 0.70 while the benchmark the search earns
+does not move at all. The financing haircut on that strategy is the larger of
+the two adjustments, and it is the one that is usually left out. Figures as
+bands rather than digits here for a reason specific to the row — the effective
+trial count comes off an eigendecomposition whose eigenvalues sit exactly on an
+integer, where the estimator steps, so a third decimal place would be a fact
+about the BLAS underneath.
+
 ```bash
-python examples/evidence.py     # all seven, non-zero if a figure moves
+python examples/evidence.py     # all nine, non-zero if a figure moves
 ```
 
-Behind them: 604 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 734 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
@@ -186,11 +202,104 @@ all produce a number of the right magnitude that is simply wrong. So:
   family, and points to the function that takes it.
 - The effective-trials estimator has no default, because the three estimators
   disagree and the choice should be visible at the call site.
+- Financing is an input step, applied once where the file is read, and the
+  report says when a rate is in force -- an excess Sharpe ratio and a
+  total-return one are different numbers that look alike.
 
 The same principle drives the validation: every number in this README was
 measured, and where a published figure did not reproduce from its own printed
 inputs (the paper's DSR is computed from an unrounded benchmark) the test
 suite records why rather than bending the formula to match.
+
+## The record is not in excess of anything
+
+Every statistic here is stated for returns in excess of a financing rate, and
+every entry point defaults to a rate of zero. That default is not neutral. A
+Sharpe ratio taken on total returns is too high by `rate / volatility` — at a
+5% cash rate and 16% annualised volatility, **0.32 of annualised Sharpe
+ratio**, which is larger than most of the haircuts this library exists to
+compute. Deflating a number that was already overstated in the same direction
+understates the deflation.
+
+```bash
+holdout financing sample/trending.csv --risk-free 0.05
+```
+
+```
+2520 periods at 252 per year, 5.00% annualised financing, compound (0.000193631 per period), arithmetic excess
+
+strategy   gross  excess  financing  rate/vol  residual
+-------------------------------------------------------
+ma10_120  +1.046  +0.572      0.473     0.473  +0.0e+00
+ma30_250  +1.007  +0.534      0.473     0.473  -3.3e-16
+...
+
+For comparison, the haircut the search itself earns over 30 trials is
+0.651 annualised. The largest financing haircut above is 0.473.
+```
+
+`--risk-free` is on every command that reads a returns CSV, and the conversion
+happens where the file is read rather than inside each command, so a rate given
+once reaches every figure that command prints. `holdout deflate` on that sweep
+returns a deflated Sharpe ratio of 0.971 on the returns as reported and 0.644
+in excess of 5%, with the benchmark the search earns unchanged. That is the
+conclusion moving, not the figure.
+
+```python
+from holdout import excess_returns, financing_impact, levered_excess, period_rate
+
+rate = period_rate(0.05, 252, compounding="compound")   # 1.93631e-04
+net = excess_returns(returns, rate)                      # or convention="geometric"
+impact = financing_impact(returns, rate, periods_per_year=252)
+impact.annualised_shift   # what financing took
+impact.predicted_shift    # rate / volatility, the closed form for it
+impact.residual           # what the closed form missed: zero for a constant rate
+```
+
+**Both conventions the conversion involves are named rather than assumed**, and
+measuring them is what says which one matters.
+
+The *excess-return* convention turns out not to. `(1 + r) / (1 + rf) - 1` is
+`(r - rf) / (1 + rf)`: for a constant rate the geometric excess return is the
+arithmetic one times a positive constant, and a Sharpe ratio does not see
+positive constants. So the choice cannot move any ratio of a mean to a
+standard deviation — they agree to 1e-12 relative across rates up to 40%, which
+is the identity rather than an approximation. It does move the mean and the
+volatility, both by that factor, so reported returns and drawdowns are not
+indifferent to it. Only a rate that varies separates the ratios, and then by
+about 4e-04 relative over a decade of daily returns against a cash rate
+sweeping 0% to 6%.
+
+The *compounding* convention is a rounding error beside the rate itself: at 5%
+over 252 periods, dividing gives 1.98413e-04 and taking the 252nd root gives
+1.93631e-04, a difference of 4.8e-06 that moves the haircut by 2.4%. It is
+offered because the two are different numbers and the caller should know which
+one is in force, not because the answer turns on it.
+
+It is computed as `expm1(log1p(a) / n)` rather than `(1 + a) ** (1 / n) - 1`.
+The second builds a growth factor a hair above one and subtracts one from it,
+and a small rate loses its leading digits to that cancellation: at 0.25% over
+252 periods it loses eleven of them and the round trip through `annual_rate`
+comes back 4e-12 off its input, where the first round-trips exactly. The first
+draft used the direct form; a round-trip test at 1e-12 is what caught it.
+
+### Leverage is Sharpe-neutral only at no spread
+
+A reported Sharpe ratio is often levered up afterwards on the argument that the
+ratio does not care. It does not, when the borrowing is at the financing rate
+exactly:
+
+```python
+levered_excess(returns, leverage=3.0, rate=rate, spread=0.0)
+# == 3.0 * excess_returns(returns, rate), to 1e-16
+```
+
+Pay a spread `s` over that rate and the ratio falls by
+`(1 - 1/leverage) * s / sigma`, exactly — at a 1% annualised spread, 16%
+volatility and three turns, 0.04 of annualised Sharpe ratio. Below one turn the
+position lends rather than borrows, so it pays no spread and the scaling holds
+whatever the spread is. All four of those are tested as identities rather than
+tolerances, because that is what they are.
 
 ## Sharpe ratio inference
 
@@ -1081,6 +1190,7 @@ both are accurate, the series' own error is 7.3e-10 at `z = 8` and 2.8e-16 at
 | `series` | input validation for return series and matrices |
 | `moments` | skewness, raw kurtosis, autocorrelation |
 | `sharpe` | Sharpe ratio, Lo and Mertens standard errors, Lo's serial-correlation factor |
+| `financing` | excess returns, both conventions, the rate conversion, the levered case |
 | `deflated` | probabilistic and deflated Sharpe ratios, minimum track record, expected maximum |
 | `trials` | effective number of independent trials |
 | `multiple` | adjusted p-values, haircut Sharpe ratios, minimum t-statistic |

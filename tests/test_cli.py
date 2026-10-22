@@ -554,3 +554,123 @@ def test_selected_refuses_a_single_strategy(sample: Path, tmp_path: Path) -> Non
     one = tmp_path / "one.csv"
     one.write_text("\n".join(",".join(row.split(",")[:2]) for row in rows) + "\n")
     assert main(["selected", str(one)]) == 2
+
+
+def test_financing_reports_the_haircut_and_the_closed_form(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "financing",
+        str(sample / "trending.csv"),
+        "--risk-free",
+        "0.05",
+        "--column",
+        "ma10_120",
+    )
+    assert "5.00% annualised financing, compound" in out
+    assert "arithmetic excess" in out
+    row = next(line for line in out.splitlines() if line.startswith("ma10_120"))
+    _, gross, excess, haircut, closed_form, residual = row.split()
+    assert float(gross) > float(excess)
+    assert float(haircut) == pytest.approx(float(closed_form), abs=5e-4)
+    assert abs(float(residual)) < 1e-12
+    assert "the haircut the search itself earns over 30 trials" in out
+
+
+def test_financing_needs_a_rate_to_report_on(sample: Path) -> None:
+    """The default of zero would make the command print a page of zeros."""
+    assert main(["financing", str(sample / "sweep.csv")]) == 2
+
+
+def test_financing_prices_a_spread_only_above_one_turn(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["financing", str(sample / "trending.csv"), "--risk-free", "0.05", "--spread", "0.01"]
+    lent = run(capsys, *args, "--leverage", "0.5")
+    borrowed = run(capsys, *args, "--leverage", "3")
+    assert "giving up 0.00% of return a year" in lent
+    assert "giving up 0.67% of return a year" in borrowed
+    assert "0.5 turns of leverage" in lent
+
+    # The ratio effect is per column, so it is in the excess figures, not the
+    # header: three turns at a spread must come out below half a turn at one.
+    def excess_of(text: str) -> float:
+        row = next(line for line in text.splitlines() if line.startswith("ma10_120"))
+        return float(row.split()[2])
+
+    assert excess_of(borrowed) < excess_of(lent)
+
+
+def test_financing_moves_the_residual_off_zero_under_the_geometric_convention(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A constant rate is the case where the convention provably does not matter.
+
+    So the two reports differ only in the word they print and in a residual at
+    the last bit, and this pins that rather than the other way round.
+    """
+    base = ["financing", str(sample / "sweep.csv"), "--risk-free", "0.05", "--column", "ma5_40"]
+    arithmetic = run(capsys, *base)
+    geometric = run(capsys, *base, "--convention", "geometric")
+    assert "geometric excess" in geometric
+
+    def field(text: str, which: int) -> float:
+        row = next(line for line in text.splitlines() if line.startswith("ma5_40"))
+        return float(row.split()[which])
+
+    assert field(geometric, 1) == pytest.approx(field(arithmetic, 1), abs=1e-3)
+    assert field(geometric, 3) == pytest.approx(field(arithmetic, 3), abs=1e-3)
+
+
+def test_the_risk_free_rate_reaches_every_command_that_reads_a_file(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The point of converting in _load: no command is left on a total-return basis.
+
+    A Sharpe ratio must fall, and the deflated Sharpe ratio must fall with it,
+    because the benchmark the search earns does not move when a constant is
+    subtracted from every column.
+    """
+    path = str(sample / "trending.csv")
+
+    def deflated(text: str) -> float:
+        line = next(x for x in text.splitlines() if x.startswith("deflated:"))
+        return float(line.split()[1])
+
+    def expected_maximum(text: str) -> float:
+        line = next(x for x in text.splitlines() if x.startswith("expected maximum:"))
+        return float(line.split()[2])
+
+    gross = run(capsys, "deflate", path)
+    excess = run(capsys, "deflate", path, "--risk-free", "0.05")
+    assert "in excess of 5.00% annualised financing" in excess
+    assert deflated(excess) < deflated(gross)
+    assert expected_maximum(excess) == pytest.approx(expected_maximum(gross), abs=0.005)
+    # The conclusion the library draws about this sweep changes.
+    assert deflated(gross) > 0.95 > deflated(excess)
+
+    sharpe = run(capsys, "sharpe", path, "--column", "ma10_120", "--risk-free", "0.05")
+    assert "in excess of" in sharpe
+    plain = run(capsys, "sharpe", path, "--column", "ma10_120")
+    assert "in excess of" not in plain
+
+
+def test_the_two_compoundings_both_reach_the_report(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = str(sample / "trending.csv")
+    compound = run(capsys, "sharpe", path, "--column", "ma10_120", "--risk-free", "0.05")
+    simple = run(
+        capsys,
+        "sharpe",
+        path,
+        "--column",
+        "ma10_120",
+        "--risk-free",
+        "0.05",
+        "--financing-compounding",
+        "simple",
+    )
+    assert "compound (0.000193631 per period)" in compound
+    assert "simple (0.000198413 per period)" in simple
