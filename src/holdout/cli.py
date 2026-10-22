@@ -28,6 +28,7 @@ from .financing import (
     financing_impact,
     levered_returns,
     period_rate,
+    selection_under_financing,
 )
 from .io import ReturnTable, read_returns_csv, write_returns_csv
 from .mcs import Statistic, model_confidence_set
@@ -35,6 +36,7 @@ from .pairwise import sharpe_difference
 from .pbo import probability_of_backtest_overfitting
 from .selection import selection_inference
 from .sequential import NORMAL_95, confidence_sequence
+from .series import FloatArray
 from .sharpe import autocorrelation_adjusted_sharpe, estimate_sharpe
 from .spa import reality_check, romano_wolf, superior_predictive_ability
 from .stability import DEFAULT_TRIM, sharpe_break
@@ -375,7 +377,47 @@ def _cmd_financing(args: argparse.Namespace) -> int:
             f"{worst:.3f}. They are\nadjustments of the same kind to the same number; only one "
             "of them is usually reported."
         )
+        _print_selection(columns, table.names, rate, convention=convention, root=root)
     return 0
+
+
+def _print_selection(
+    columns: FloatArray,
+    names: list[str],
+    rate: float,
+    *,
+    convention: ExcessConvention,
+    root: float,
+) -> None:
+    """The winner either side of the conversion, and what the field did around it.
+
+    Separate from the table above because it is about the family rather than
+    about any one strategy: the comparison only means something when every
+    column was a candidate, which is why it is printed from the whole file even
+    when --column narrowed the rows.
+    """
+    picked = selection_under_financing(columns, rate, convention=convention)
+    print()
+    if picked.moved:
+        print(
+            f"The winner moves: {names[picked.gross_best]} gross, "
+            f"{names[picked.excess_best]} in excess of financing. Selecting before "
+            f"subtracting it\nleaves {picked.displacement * root:.3f} of annualised Sharpe "
+            "ratio on the table."
+        )
+    else:
+        print(
+            f"The winner does not move: {names[picked.gross_best]} either way. The shifts "
+            "would have to differ by\nmore than the gap it won by, and here they do not."
+        )
+    direction = "down" if picked.benchmark_excess < picked.benchmark_gross else "up"
+    print(
+        f"The field it won against is not the same field: the benchmark goes {direction}, "
+        f"from\n{picked.benchmark_gross * root:.3f} to {picked.benchmark_excess * root:.3f} "
+        "annualised. One cash rate is not one shift -- it is rate over each\nstrategy's own "
+        "volatility, so it compresses the cross-section when the quiet strategies\nare the "
+        "good ones and stretches it when they are not."
+    )
 
 
 def _cmd_deflate(args: argparse.Namespace) -> int:

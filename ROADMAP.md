@@ -700,3 +700,52 @@ dividing by a volatility, and the volatility is per strategy, so no single
 number in a header could have carried it. And the comparison against the
 search's own haircut was gated on the number of rows printed, so asking for one
 strategy by name silently dropped the row the command exists for.
+
+## Phase 19 — One cash rate is not one shift
+
+Phase 18 measured what the conversion takes off the level and left a claim
+standing under a condition nobody had stated: that the benchmark the search
+earns does not move. It does, because the shift is `rate / sigma_i` and a
+family sharing one cash rate therefore does not move by one amount.
+
+- [x] The per-column shift as a quantity of its own, since the whole effect is
+      made of the spread of those numbers rather than of their average
+- [x] Computed as a difference of ratios rather than as a quotient, which is
+      what keeps it right for a rate series, where the conversion moves each
+      column's volatility as well as its mean
+- [x] The invariance stated where it holds and asserted on data constructed to
+      satisfy it exactly — equal *sample* standard deviations, not equal
+      population ones, which is the most a family can be designed for
+- [x] A constructed counterexample in exact arithmetic, and the boundary
+      either side of it: shifts differing by 0.09 reverse a gross gap of 0.08
+      and do not reverse 0.10
+- [x] The displacement rate measured against the volatility spread that drives
+      it, monotone over four spreads, asserted on shared draws so the ordering
+      is not a coincidence of seeds
+- [x] The dispersion effect measured in both directions, because the sign is a
+      fact about the data rather than about the conversion
+- [x] The benchmark read off the library's own expected maximum rather than
+      recomputed, so there is not a second place to be wrong
+- [x] Reported from `holdout financing` for the whole file even when `--column`
+      narrowed the rows, since the comparison needs every column to have been
+      a candidate
+- [x] Six ways of breaking it confirmed to fail first
+
+The measurement that mattered: a family drawn at a *single* target volatility
+still has its winner displaced in about 2% of 200 draws, because the sample
+standard deviations differ by order `1 / sqrt(2n)` even when the population
+ones do not. Widening the span to sixteenfold takes that to about three fifths.
+The algebra alone would have said the first case never happens.
+
+What this phase corrects in the last one: the crossover sweep's benchmark goes
+from 0.651 to 0.650 under the conversion, which is why phase 18 could say it
+did not move. Thirty variants of one rule have nearly the same volatility.
+Said as a general claim it was wrong, and the command now prints the figure
+rather than leaving it to be assumed.
+
+A latent bug came out of the same work and went in ahead of it: every entry
+point that compared a standard deviation against machine epsilon did so with no
+margin, so a series that does not move returned a Sharpe ratio around 1e15
+instead of raising — in five of the six places that made the test. The sixth
+had the diagnosis in a comment. See the commit history for the sweep that now
+covers all of them.

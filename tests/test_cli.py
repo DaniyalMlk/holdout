@@ -674,3 +674,97 @@ def test_the_two_compoundings_both_reach_the_report(
     )
     assert "compound (0.000193631 per period)" in compound
     assert "simple (0.000198413 per period)" in simple
+
+
+def _dispersed(
+    path: Path, *, factor: float = 4.0, columns: int = 12, rows: int = 2000, seed: int = 1002
+) -> Path:
+    """A returns CSV whose columns share a mean return and span a range of volatilities.
+
+    The crossover sweeps `sample-data` writes have thirty rules of nearly the
+    same volatility, which is the case where financing shifts every column
+    alike and nothing interesting happens to the ranking. This is the other
+    case, written out so the command can be driven through it.
+
+    The seed is chosen, and the choice is the point: at this volatility spread
+    the winner is displaced in a little over half of draws, so a seed picked
+    without looking would have made the test pass or fail on which one it was.
+    It is also chosen *after* the ten-decimal round trip through the file,
+    since that is what the command reads.
+    """
+    import numpy as np
+
+    deviations = np.linspace(0.01 / factor, 0.01 * factor, columns)
+    rng = np.random.default_rng(seed)
+    values = rng.standard_normal((rows, columns)) * deviations + 0.0003
+    header = "day," + ",".join(f"v{j}" for j in range(columns))
+    lines = [header]
+    for i, row in enumerate(values):
+        lines.append(str(i) + "," + ",".join(f"{v:.10f}" for v in row))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_financing_says_when_the_winner_does_not_move(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The crossover sweep is the uniform-volatility case, so it should say so."""
+    out = run(capsys, "financing", str(sample / "trending.csv"), "--risk-free", "0.05")
+    assert "The winner does not move" in out
+    assert "The field it won against is not the same field" in out
+
+
+def test_financing_says_when_the_winner_moves(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """And on a family whose volatilities differ, it moves and the displacement is priced."""
+    path = _dispersed(tmp_path / "dispersed.csv")
+    out = run(capsys, "financing", str(path), "--risk-free", "0.05")
+    assert "The winner moves:" in out
+    assert "of annualised Sharpe ratio on the table" in out
+    line = next(x for x in out.splitlines() if x.startswith("The winner moves:"))
+    named = re.findall(r"\bv\d+\b", line)
+    assert len(named) == 2
+    assert named[0] != named[1]
+
+
+def test_financing_reports_the_benchmark_moving_in_both_directions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A common mean compresses the field; a common ratio stretches it.
+
+    Both printed from the same command, because the sign is a fact about the
+    data rather than about the conversion and a report that only ever said
+    "down" would be describing one data set.
+    """
+    import numpy as np
+
+    compressing = run(
+        capsys, "financing", str(_dispersed(tmp_path / "a.csv")), "--risk-free", "0.05"
+    )
+    assert "the benchmark goes down" in compressing
+
+    deviations = np.linspace(0.004, 0.03, 12)
+    rng = np.random.default_rng(9)
+    values = rng.standard_normal((2000, 12)) * deviations + 0.05 * deviations
+    path = tmp_path / "b.csv"
+    path.write_text(
+        "\n".join(
+            ["day," + ",".join(f"v{j}" for j in range(12))]
+            + [str(i) + "," + ",".join(f"{v:.10f}" for v in row) for i, row in enumerate(values)]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    stretching = run(capsys, "financing", str(path), "--risk-free", "0.05")
+    assert "the benchmark goes up" in stretching
+
+
+def test_financing_leaves_the_selection_out_of_a_single_column_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One strategy is not a search, so there is no field and nothing to compare."""
+    path = _dispersed(tmp_path / "one.csv", columns=1)
+    out = run(capsys, "financing", str(path), "--risk-free", "0.05")
+    assert "The winner" not in out
+    assert "the haircut the search itself earns" not in out
