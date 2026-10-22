@@ -17,6 +17,8 @@ from holdout import (
     annual_rate,
     excess_columns,
     excess_returns,
+    levered_excess,
+    levered_returns,
     period_rate,
     sharpe_ratio,
 )
@@ -314,3 +316,97 @@ def test_excess_columns_geometric_matches_the_series_path_column_by_column() -> 
     out = excess_columns(x, rf, convention="geometric")
     for j in range(3):
         assert np.array_equal(out[:, j], excess_returns(x[:, j], rf, convention="geometric"))
+
+
+# --- leverage ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("leverage", [0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 20.0])
+def test_leverage_at_no_spread_is_a_pure_scaling(leverage: float) -> None:
+    """``L * (r - rf)``, so every scale-free statistic is untouched.
+
+    This is the sense in which a Sharpe ratio "does not care" about leverage,
+    and the whole of that claim: it holds when the borrowing is at the
+    financing rate exactly and nowhere else.
+    """
+    x = _series()
+    rf = period_rate(0.04, PPY, compounding="compound")
+    base = excess_returns(x, rf)
+    levered = levered_excess(x, leverage=leverage, rate=rf, spread=0.0)
+    assert np.max(np.abs(levered - leverage * base)) < 1e-16 * leverage
+    assert sharpe_ratio(levered) == pytest.approx(sharpe_ratio(base), rel=1e-14, abs=1e-16)
+
+
+def test_leverage_of_one_changes_nothing_at_all() -> None:
+    """Nothing is borrowed, so the spread cannot reach the return. Bit for bit."""
+    x = _series(256)
+    rf = period_rate(0.04, PPY, compounding="compound")
+    for spread in (0.0, 0.001, 0.05):
+        assert np.array_equal(
+            levered_excess(x, leverage=1.0, rate=rf, spread=spread),
+            excess_returns(x, rf),
+        )
+
+
+def test_a_spread_costs_exactly_what_the_closed_form_says() -> None:
+    """``SR`` falls by ``(1 - 1/L) * spread / sigma``, which is an identity, not a tolerance.
+
+    At a 1% annualised spread, 16% annualised volatility and three turns of
+    leverage, that is 0.04 of annualised Sharpe ratio — a quarter of the
+    multiplicity haircut this library computes for fifty trials, from a line
+    item nobody reports.
+    """
+    x = _series()
+    rf = period_rate(0.04, PPY, compounding="compound")
+    spread = period_rate(0.01, PPY, compounding="compound")
+    base = excess_returns(x, rf)
+    sigma = float(np.std(base, ddof=1))
+    for leverage in (1.0, 2.0, 3.0, 5.0):
+        levered = levered_excess(x, leverage=leverage, rate=rf, spread=spread)
+        predicted = sharpe_ratio(base) - (1.0 - 1.0 / leverage) * spread / sigma
+        assert sharpe_ratio(levered) == pytest.approx(predicted, rel=0.0, abs=1e-15)
+    three_turns = levered_excess(x, leverage=3.0, rate=rf, spread=spread)
+    drop = (sharpe_ratio(base) - sharpe_ratio(three_turns)) * math.sqrt(PPY)
+    assert 0.04 < drop < 0.045
+
+
+def test_a_lender_does_not_pay_the_borrowers_spread() -> None:
+    """Below one turn there is nothing borrowed; the remainder is lent at the rate itself."""
+    x = _series()
+    rf = period_rate(0.04, PPY, compounding="compound")
+    base = excess_returns(x, rf)
+    for spread in (0.0, 0.0005, 0.01):
+        half = levered_excess(x, leverage=0.5, rate=rf, spread=spread)
+        assert np.max(np.abs(half - 0.5 * base)) < 1e-17
+
+
+def test_levered_returns_is_the_total_return_not_the_excess_one() -> None:
+    """The gross series, which is what a drawdown is measured on."""
+    x = _series(512)
+    rf = 0.0002
+    spread = 0.0001
+    total = levered_returns(x, leverage=2.0, rate=rf, spread=spread)
+    assert np.max(np.abs(total - (2.0 * x - (rf + spread)))) < 1e-18
+    assert np.array_equal(levered_excess(x, leverage=2.0, rate=rf, spread=spread), total - rf)
+    assert np.max(np.abs(total)) > np.max(np.abs(x))
+
+
+def test_levered_excess_composes_under_the_geometric_convention() -> None:
+    x = _series(512)
+    rf = _ramp(512, 0.0, 0.05) / PPY
+    total = levered_returns(x, leverage=2.5, rate=rf, spread=0.0001)
+    assert np.array_equal(
+        levered_excess(x, leverage=2.5, rate=rf, spread=0.0001, convention="geometric"),
+        excess_returns(total, rf, convention="geometric"),
+    )
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0, math.nan, math.inf])
+def test_leverage_must_be_positive_and_finite(bad: float) -> None:
+    with pytest.raises(ValidationError, match="leverage must be positive"):
+        levered_returns(_series(16), leverage=bad, rate=0.0)
+
+
+def test_spread_must_be_finite() -> None:
+    with pytest.raises(ValidationError, match="spread must be finite"):
+        levered_returns(_series(16), leverage=2.0, rate=0.0, spread=math.nan)
