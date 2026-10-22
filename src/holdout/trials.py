@@ -36,7 +36,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .exceptions import ValidationError
-from .series import FloatArray, as_matrix
+from .series import FloatArray, as_matrix, constant_floor
 
 __all__ = ["check_correlation", "effective_number_of_trials", "trial_correlation"]
 
@@ -68,10 +68,18 @@ def check_correlation(matrix: ArrayLike, *, tolerance: float = 1e-8) -> FloatArr
 def trial_correlation(returns: ArrayLike) -> FloatArray:
     """Pearson correlation matrix of the columns of a ``(periods, trials)`` matrix."""
     x = as_matrix(returns, min_rows=3)
-    sd = x.std(axis=0)
-    flat = np.flatnonzero(sd <= np.finfo(np.float64).eps * np.max(np.abs(x), axis=0))
-    if flat.size:
-        raise ValidationError(f"trial column {int(flat[0])} has zero variance")
+    # Column by column, not with an axis argument. The guard compares a
+    # standard deviation against a multiple of epsilon, and ``std(axis=0)``
+    # reduces along a strided axis: on a constant column it leaves rounding of
+    # hundreds of times ``eps * level`` where the one-dimensional reduction
+    # leaves under four, measured over a grid of lengths, column counts and
+    # magnitudes in tests/test_constant_series.py. A
+    # tolerance set to absorb that would be a tolerance chosen to accommodate
+    # numpy's reduction order rather than the data's rounding.
+    for column in range(x.shape[1]):
+        series = x[:, column]
+        if float(np.std(series, ddof=1)) <= constant_floor(series):
+            raise ValidationError(f"trial column {column} has zero variance")
     c = np.corrcoef(x, rowvar=False)
     return np.atleast_2d(np.asarray(c, dtype=np.float64))
 

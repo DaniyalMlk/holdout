@@ -79,7 +79,7 @@ from numpy.typing import ArrayLike
 
 from .bootstrap import Seed, optimal_block_length, stationary_bootstrap_indices
 from .exceptions import InsufficientDataError, ValidationError
-from .series import FloatArray, as_returns, check_probability
+from .series import FloatArray, as_returns, check_probability, constant_floor
 
 __all__ = [
     "DEFAULT_TRIM",
@@ -387,7 +387,6 @@ def _sharpe(sample: FloatArray) -> float:
     has produced.
     """
     deviation = float(np.std(sample, ddof=1))
-    scale = float(np.max(np.abs(sample))) if sample.size else 0.0
-    if deviation <= np.finfo(np.float64).eps * max(scale, 1.0):
+    if not sample.size or deviation <= constant_floor(sample):
         return 0.0
     return float(np.mean(sample)) / deviation

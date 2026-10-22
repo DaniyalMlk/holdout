@@ -61,7 +61,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from .exceptions import InsufficientDataError, ValidationError
-from .series import FloatArray, as_returns, check_periods_per_year
+from .series import FloatArray, as_returns, check_periods_per_year, constant_floor
 
 __all__ = [
     "SharpeDifference",
@@ -209,16 +209,6 @@ class SharpeDifference:
         return self.difference * math.sqrt(self.periods_per_year)
 
 
-#: Multiple of machine epsilon below which a series is treated as constant. The
-#: test has to be *relative*, because the standard deviation of a constant array
-#: is not exactly zero: subtracting the mean leaves rounding of order
-#: ``eps * level``, and on a series of 0.001 repeated 500 times numpy returns
-#: 4.3e-19 rather than 0. An absolute guard at zero therefore does not fire, the
-#: Sharpe ratio comes out at 2.3e15, and every number downstream is arithmetic on
-#: rounding error.
-CONSTANT_TOLERANCE = 8.0
-
-
 def _deviation(series: FloatArray, name: str) -> float:
     """Sample standard deviation, refusing a series that does not move.
 
@@ -227,8 +217,7 @@ def _deviation(series: FloatArray, name: str) -> float:
     """
     deviation = float(series.std(ddof=1))
     scale = float(np.abs(series).max()) or 1.0
-    floor = CONSTANT_TOLERANCE * float(np.finfo(np.float64).eps) * scale
-    if deviation <= floor:
+    if deviation <= constant_floor(series):
         raise InsufficientDataError(
             f"{name} does not move: its standard deviation is {deviation:.4g}, which is "
             f"within rounding of zero for a series of this magnitude ({scale:.4g}). A "
