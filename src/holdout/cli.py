@@ -339,10 +339,15 @@ def _cmd_financing(args: argparse.Namespace) -> int:
         f"({rate:.6g} per period), {convention} excess"
     )
     if args.leverage != 1.0:
+        # Below one turn nothing is borrowed, so the borrowed fraction is zero
+        # rather than the negative number (1 - 1/L) would give. And what the
+        # spread costs is a *return*: dividing it by a volatility is what makes
+        # it a Sharpe ratio, and the volatility is per column, so the effect on
+        # the ratio shows up in the excess column rather than in this line.
+        borrowed = max(0.0, 1.0 - 1.0 / args.leverage)
         print(
             f"at {args.leverage:g} turns of leverage funded {args.spread:.2%} over that rate, "
-            f"which costs {(1.0 - 1.0 / args.leverage) * spread * root:.3f} of the ratio "
-            f"on top of the financing itself"
+            f"giving up {borrowed * args.spread:.2%} of return a year before the ratio is taken"
         )
     print()
     print(
@@ -357,9 +362,10 @@ def _cmd_financing(args: argparse.Namespace) -> int:
         "closed form missed -- zero for a constant rate, the rate's own variation\n"
         "otherwise."
     )
-    if len(names) >= 2:
-        # Deliberately the whole table, not the --column selection: the search
-        # that earns the haircut is the one that produced every column.
+    # Deliberately the whole table, not the --column selection: the search that
+    # earns the haircut is the one that produced every column, so it is reported
+    # whenever the file holds more than one of them.
+    if table.values.shape[1] >= 2:
         columns = table.values
         multiplicity = deflate_trials(columns).expected_maximum * root
         worst = max(float(r[3]) for r in rows)
