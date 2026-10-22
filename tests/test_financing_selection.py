@@ -13,6 +13,7 @@ import math
 
 import numpy as np
 import pytest
+from numpy.typing import ArrayLike
 
 from holdout import (
     ValidationError,
@@ -47,10 +48,18 @@ def _exact(means: list[float], deviations: list[float], n: int = 1000) -> FloatA
 
 
 def _family(
-    deviations: FloatArray, *, mean: float = 0.0003, seed: int = 0, n: int = 2000
+    deviations: ArrayLike, *, mean: float = 0.0003, seed: int = 0, n: int = 2000
 ) -> FloatArray:
+    """A draw of one column per entry of ``deviations``, sharing a mean return.
+
+    ``deviations`` is widened to ``ArrayLike`` and narrowed here rather than
+    taken as ``FloatArray``: under the numpy stubs CI runs, ``linspace`` and
+    ``full`` are typed as ``floating[Any]`` rather than ``float64``, so every
+    call site would otherwise need its own cast.
+    """
+    sigma = np.asarray(deviations, dtype=np.float64)
     rng = np.random.default_rng(seed)
-    return np.asarray(rng.standard_normal((n, deviations.size)) * deviations + mean)
+    return np.asarray(rng.standard_normal((n, sigma.size)) * sigma + mean, dtype=np.float64)
 
 
 # --- the construction itself ------------------------------------------------
@@ -145,11 +154,9 @@ def test_equal_target_volatility_is_not_enough_to_keep_the_winner() -> None:
     have predicted.
     """
     flat = np.full(30, 0.01)
-    moves = sum(
-        1
-        for seed in range(200)
-        if selection_under_financing(_family(flat, seed=1000 + seed), RATE).moved
-    )
+    moves = 0
+    for seed in range(200):
+        moves += int(selection_under_financing(_family(flat, seed=1000 + seed), RATE).moved)
     assert 1 <= moves <= 12, moves
 
 
@@ -169,11 +176,9 @@ def test_the_displacement_rate_grows_with_the_volatility_spread(
     the next test asserts that separately.
     """
     deviations = np.linspace(0.01 / factor, 0.01 * factor, 30)
-    moves = sum(
-        1
-        for seed in range(200)
-        if selection_under_financing(_family(deviations, seed=1000 + seed), RATE).moved
-    )
+    moves = 0
+    for seed in range(200):
+        moves += int(selection_under_financing(_family(deviations, seed=1000 + seed), RATE).moved)
     assert low <= moves / 200 <= high, moves
 
 
@@ -182,11 +187,11 @@ def test_the_rate_is_monotone_in_the_spread() -> None:
     rates = []
     for factor in (1.0, 1.2, 2.0, 4.0):
         deviations = np.linspace(0.01 / factor, 0.01 * factor, 30)
-        moves = sum(
-            1
-            for seed in range(120)
-            if selection_under_financing(_family(deviations, seed=1000 + seed), RATE).moved
-        )
+        moves = 0
+        for seed in range(120):
+            moves += int(
+                selection_under_financing(_family(deviations, seed=1000 + seed), RATE).moved
+            )
         rates.append(moves / 120)
     assert rates == sorted(rates)
     assert rates[-1] - rates[0] > 0.3

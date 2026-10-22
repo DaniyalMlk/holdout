@@ -81,7 +81,7 @@ about the BLAS underneath.
 python examples/evidence.py     # all nine, non-zero if a figure moves
 ```
 
-Behind them: 1,015 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 1,039 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
@@ -290,6 +290,65 @@ and a small rate loses its leading digits to that cancellation: at 0.25% over
 252 periods it loses eleven of them and the round trip through `annual_rate`
 comes back 4e-12 off its input, where the first round-trips exactly. The first
 draft used the direct form; a round-trip test at 1e-12 is what caught it.
+
+### One cash rate is not one shift
+
+The haircut above is `rate / volatility`, so a family of strategies sharing one
+cash rate does not move by one amount: the shift is largest for the least
+volatile of them. Two things follow, and neither is visible from the level.
+
+**The winner can change.** The ranking by Sharpe ratio survives the conversion
+exactly when the shifts coincide, which needs the *sample* standard deviations
+to coincide — not the population ones, which is the most a family can be
+designed for. A constructed pair makes the mechanism exact: columns at 0.05 and
+0.02 per-period Sharpe, volatilities of 0.2% and 2%, so the shifts are 0.1 and
+0.01. The gap of 0.03 is less than the 0.09 the shifts differ by, and the order
+has to reverse — it comes out at -0.05 against +0.01. Measured over 200 draws of
+thirty trials, the winner is displaced in:
+
+| Volatilities span | Winner displaced |
+| --- | --- |
+| one value | 2% of draws |
+| 1.4x | ~10% |
+| 4x | ~44% |
+| 16x | ~61% |
+
+The first row is the interesting one. A family drawn at a single target
+volatility satisfies the invariance's condition only in expectation — the
+sample standard deviations still differ by order `1 / sqrt(2n)` — so even
+there a close race turns over sometimes. The algebra alone would have said
+never.
+
+**The benchmark moves too, in either direction.** The cross-sectional
+dispersion of the trial Sharpe ratios is what the deflated Sharpe ratio's
+benchmark is computed from, and financing changes it. With a common mean return
+the quiet strategies have both the highest ratios and the largest shifts, so the
+field compresses and the bar comes *down*; with a common Sharpe ratio a level
+field is hit hardest at the quiet end, so it stretches and the bar goes *up*.
+Both are measured, because the sign is a fact about the data and not about the
+conversion.
+
+That is also the condition the front page's earlier claim needed. The benchmark
+does not move on the crossover sweep because thirty variants of one rule have
+nearly the same volatility — 0.651 to 0.650 — and `holdout financing` now says
+so rather than leaving it to be assumed:
+
+```
+The winner does not move: ma10_120 either way. The shifts would have to differ by
+more than the gap it won by, and here they do not.
+The field it won against is not the same field: the benchmark goes down, from
+0.651 to 0.650 annualised.
+```
+
+```python
+from holdout import financing_shifts, selection_under_financing
+
+financing_shifts(trials, rate)          # rate / sigma_i, one per strategy
+picked = selection_under_financing(trials, rate, periods_per_year=252)
+picked.moved                             # did the winner change
+picked.displacement                      # excess Sharpe given up by selecting first
+picked.benchmark_gross, picked.benchmark_excess
+```
 
 ### Leverage is Sharpe-neutral only at no spread
 
