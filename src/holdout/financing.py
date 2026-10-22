@@ -150,18 +150,20 @@ def annual_rate(rate: float, periods_per_year: float, *, compounding: Compoundin
 def _rate_array(rate: float | ArrayLike, rows: int, *, convention: ExcessConvention) -> FloatArray:
     """Broadcast ``rate`` to ``rows`` per-period rates, validating as it goes."""
     array = np.asarray(rate, dtype=np.float64)
+    out: FloatArray
     if array.ndim == 0:
         value = float(array)
         if not math.isfinite(value):
             raise ValidationError(f"rate must be finite, got {value!r}")
         out = np.full(rows, value, dtype=np.float64)
     else:
-        out = as_returns(array, name="rate", min_length=1).copy()
-        if out.size != rows:
+        series = as_returns(array, name="rate", min_length=1)
+        if series.size != rows:
             raise ValidationError(
-                f"rate has {out.size} observation(s) but returns has {rows}; a rate series "
+                f"rate has {series.size} observation(s) but returns has {rows}; a rate series "
                 "must line up with the return series period for period"
             )
+        out = series
     if convention == "geometric":
         bad = np.flatnonzero(out <= -1.0)
         if bad.size:

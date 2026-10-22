@@ -24,16 +24,17 @@ from holdout import (
     period_rate,
     sharpe_ratio,
 )
+from holdout.series import FloatArray
 
 PPY = 252.0
 
 
-def _series(n: int = 2520, *, seed: int = 7) -> np.ndarray:
+def _series(n: int = 2520, *, seed: int = 7) -> FloatArray:
     rng = np.random.default_rng(seed)
     return np.asarray(rng.normal(0.0004, 0.01, n), dtype=np.float64)
 
 
-def _ramp(n: int, low: float, high: float) -> np.ndarray:
+def _ramp(n: int, low: float, high: float) -> FloatArray:
     """A rate path sweeping ``low`` to ``high`` and back, annualised."""
     wave = 0.5 + 0.5 * np.sin(np.linspace(0.0, 8.0, n))
     return np.asarray(low + (high - low) * wave, dtype=np.float64)
