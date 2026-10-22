@@ -40,14 +40,14 @@ from holdout import (
     skewness,
     trial_correlation,
 )
-from holdout.series import CONSTANT_TOLERANCE, constant_floor
+from holdout.series import CONSTANT_TOLERANCE, FloatArray, constant_floor
 
 #: Lengths and magnitudes whose product covers the pairs where the residue is
 #: nonzero. 0.001 at a thousand rows is the pair that was escaping.
 LENGTHS = (10, 100, 1000, 2000, 10000)
 LEVELS = (1e-9, 1e-6, 0.0007, 0.001, 1.0, 1234.5, -0.002)
 
-SERIES_FUNCTIONS: tuple[Callable[[np.ndarray], object], ...] = (
+SERIES_FUNCTIONS: tuple[Callable[[FloatArray], object], ...] = (
     sharpe_ratio,
     estimate_sharpe,
     skewness,
@@ -60,7 +60,7 @@ SERIES_FUNCTIONS: tuple[Callable[[np.ndarray], object], ...] = (
 @pytest.mark.parametrize("level", LEVELS)
 @pytest.mark.parametrize("function", SERIES_FUNCTIONS, ids=lambda f: f.__name__)
 def test_a_series_that_does_not_move_is_refused(
-    function: Callable[[np.ndarray], object], length: int, level: float
+    function: Callable[[FloatArray], object], length: int, level: float
 ) -> None:
     with pytest.raises(ValidationError):
         function(np.full(length, level))
