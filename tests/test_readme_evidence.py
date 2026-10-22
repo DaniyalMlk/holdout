@@ -43,7 +43,9 @@ ROWS = (
     "Lo's eta(q) against its AR(1) closed form, eight cases",
     "CPCV path count against k/N x C(N, k), every N up to 12",
     "Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400",
+    "The two excess-return conventions, constant rate, five rates to 40%",
     "50 pure-noise strategies, best selected, 200 runs",
+    "30 crossover trials with a real edge, best selected, before and after financing",
 )
 
 #: Results the README quotes, exactly as the script renders them.
@@ -53,7 +55,10 @@ RESULTS = (
     "agree to 1e-12",
     "exact",
     "agree to 1e-14 relative, past where the tail itself underflows",
+    "agree to 1e-12 relative, which is the identity they are",
     "PSR(0) > 95% in 90% of them, DSR > 95% in none",
+    "DSR clears 0.95 gross and falls below 0.70 in excess of 5%, "
+    "the financing haircut exceeding the search's own",
 )
 
 
@@ -125,7 +130,9 @@ def test_every_figure_is_inside_the_bound_the_readme_states(
         "Lo's eta(q) against its AR(1) closed form, eight cases": 1e-15,
         "CPCV path count against k/N x C(N, k), every N up to 12": 0.0,
         "Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400": 1e-14,
+        "The two excess-return conventions, constant rate, five rates to 40%": 1e-12,
         "50 pure-noise strategies, best selected, 200 runs": 0.0,
+        "30 crossover trials with a real edge, best selected, before and after financing": 0.0,
     }
     for label, bound in bounds.items():
         assert checks[label] <= bound, f"{label} measured {checks[label]}, bound {bound}"
