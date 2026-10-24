@@ -171,13 +171,20 @@ def maximum_drawdown(returns: ArrayLike) -> MaximumDrawdown:
     The trough is the *first* curve point attaining the deepest drawdown and the
     peak is the last high-water mark at or before it, which is the only reading
     under which the pair brackets a genuine fall.
+
+    The peak is found from the end of that prefix rather than with ``argmax``,
+    which returns the first index attaining the maximum. The two differ
+    whenever the curve sits flat at its high-water mark before falling, which
+    is what a strategy out of the market looks like, and the first reading
+    charges the flat days to the fall.
     """
     curve = equity_curve(returns)
     peaks: FloatArray = np.maximum.accumulate(curve)
     draw = peaks - curve
     trough = int(np.argmax(draw))
     depth = float(draw[trough])
-    peak = int(np.argmax(curve[: trough + 1]))
+    before = curve[: trough + 1]
+    peak = trough - int(np.argmax(before[::-1]))
     recovery: int | None = None
     if depth == 0.0:
         peak = trough
