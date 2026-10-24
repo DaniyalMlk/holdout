@@ -794,3 +794,48 @@ arbitrary and nothing documents a rule, and the trough and the recovery in the
 same function both want the first index and say so. One site, one contradiction.
 "I swept and this was the only one" is a stronger claim than "I fixed the one I
 found", and it is only available if the sweep is actually run.
+
+## Phase 21 — A tolerance of the wrong shape
+
+`check_shape` compared kurtosis against Pearson's bound `1 + skewness**2` with
+a fixed absolute slack of `1e-12`. The bound is one at a symmetric record and
+twenty thousand at a skewness of 141, and the round-off in `moments`' power sums
+scales with it, so the slack was generous at one end of that range and
+meaningless at the other.
+
+- [x] The slack a share of the bound rather than an amount, as
+      `stability.VARIANCE_FLOOR` already was
+- [x] Its size measured rather than chosen: over 4,149 two-valued series, 1,696
+      came out below the bound, the worst by 4.00e-11 absolute at a bound of
+      2.0e+04 and by 9.99e-14 relative
+- [x] The identity behind that asserted directly — a two-point distribution
+      satisfies Pearson with equality, so a two-valued record is *on* the
+      boundary and lands either side by round-off
+- [x] The other half kept: an excess kurtosis passed where raw was meant is
+      still refused, with the margin asserted beside it, since the two differ by
+      3 and `3 / (1 + skew**2)` stays four orders above the slack at any
+      skewness a record can produce
+- [x] The scaling asserted directly at bounds of 1, 366 and 20,000, because it
+      is the only test that can distinguish a relative slack from an absolute
+      one of the same size
+- [x] The message no longer blaming the caller for passing an excess kurtosis
+      when the caller passed nothing, and quoting the bound it compared against
+- [x] The repository swept for other absolute tolerances held against quantities
+      that are not of order one, and the sweep's result recorded
+- [x] Four ways of breaking it confirmed to fail first
+
+What the measuring turned up. The grid of two-point records shows that `1e-12`
+was too *small*; it cannot show that an amount is the wrong *kind* of thing,
+because the worst absolute round-off any record in it produces is 4e-11, still
+inside an absolute `1e-9`. Those are different claims and they need different
+tests, which is why the scaling is asserted at three bounds directly rather than
+inferred from the sweep.
+
+The sweep's result. `stability.VARIANCE_FLOOR` is already relative and its
+comment says why in as many words: "'is the variance zero' has no absolute
+answer". `mcs` compares against the largest column. `trials` scales its
+semi-definiteness tolerance by the matrix order, and a correlation matrix's
+eigenvalues are of order one by construction. So the lesson existed in
+`stability.py` and had not reached `sharpe.py` — the same shape as phase 19's
+epsilon margin, which was in one module for nine phases before the other five
+got it.
