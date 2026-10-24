@@ -17,6 +17,7 @@ from holdout import (
     sharpe_standard_error,
 )
 from holdout.moments import moments
+from holdout.series import FloatArray
 from holdout.sharpe import PEARSON_SLACK, check_shape, sharpe_variance_term
 
 
@@ -199,7 +200,7 @@ def test_adjusted_sharpe_arguments() -> None:
 OLD_ABSOLUTE_SLACK = 1e-12
 
 
-def two_point(n: int, spikes: int, value: float) -> np.ndarray:
+def two_point(n: int, spikes: int, value: float) -> FloatArray:
     """A record flat on every day but ``spikes`` of them."""
     series = np.zeros(n)
     series[:spikes] = value
