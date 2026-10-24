@@ -295,3 +295,138 @@ def test_the_conditioning_budget_is_looser_for_an_integral_than_for_a_probabilit
     with pytest.raises(ValidationError, match="cancellation"):
         drawdown_survival(2.0, 4.0, -0.3, 0.15)
     assert 0.0 < drawdown_survival(2.0, 4.0, -0.3, 0.15, max_conditioning=1e12) <= 1.0
+
+
+# The tail-cut ladder, and the domain it is supposed to carry.
+#
+# `_TAIL_CUTS` says the cuts are tried in order and the first one whose ceiling
+# the expansion can reach is used. For `expected_maximum_drawdown` that was
+# true; for `drawdown_quantile` the step handed to the ladder was closed form
+# and could not raise, so the ladder was inert and the conditioning failures
+# happened in the bisection, outside it.
+
+LOSING = np.random.default_rng(687).normal(-0.0002, 0.01, 252)
+LOSING_DRIFT = float(np.mean(LOSING))
+LOSING_DEVIATION = float(np.std(LOSING, ddof=1))
+
+
+def total_sharpe(drift: float, deviation: float, periods: float) -> float:
+    return drift * periods / (deviation * math.sqrt(periods))
+
+
+def quantile_at(ratio: float, probability: float = 0.95) -> float:
+    """The quantile for a record of this total Sharpe ratio over a year."""
+    deviation = LOSING_DEVIATION
+    drift = ratio * deviation * math.sqrt(252.0) / 252.0
+    return drawdown_quantile(probability, 252.0, drift, deviation)
+
+
+def test_a_losing_record_gets_a_quantile_and_not_only_an_expectation() -> None:
+    """This record was refused by the quantile while the expectation answered."""
+    assert total_sharpe(LOSING_DRIFT, LOSING_DEVIATION, 252.0) == pytest.approx(-3.110, abs=5e-4)
+    expected = expected_maximum_drawdown(252.0, LOSING_DRIFT, LOSING_DEVIATION)
+    median = drawdown_quantile(0.5, 252.0, LOSING_DRIFT, LOSING_DEVIATION)
+    limit = drawdown_quantile(0.95, 252.0, LOSING_DRIFT, LOSING_DEVIATION)
+    assert expected == pytest.approx(0.574129, rel=1e-5)
+    assert median == pytest.approx(0.571172, rel=1e-5)
+    assert limit == pytest.approx(0.833000, rel=1e-5)
+    # The three are ordered, which they have to be for any of them to mean
+    # anything: a median drawdown near the expectation, and a one-in-twenty
+    # limit well above both.
+    assert median < expected < limit
+
+
+def test_the_quantile_and_the_expectation_now_have_the_same_domain() -> None:
+    """Which is the claim `_TAIL_CUTS` makes, and the quantile did not keep.
+
+    The boundary is also monotone in the drift now. It was not: it depended on
+    which midpoints the bisection happened to visit relative to a ceiling that
+    never loosened, so it fired at a total Sharpe ratio of -3.11 and not at
+    -3.29.
+    """
+    answered = []
+    refused = []
+    for ratio in np.linspace(-2.5, -4.0, 31):
+        drift = float(ratio) * LOSING_DEVIATION * math.sqrt(252.0) / 252.0
+        try:
+            drawdown_quantile(0.95, 252.0, drift, LOSING_DEVIATION)
+        except ValidationError:
+            refused.append(float(ratio))
+        else:
+            answered.append(float(ratio))
+        try:
+            expected_maximum_drawdown(252.0, drift, LOSING_DEVIATION)
+        except ValidationError:
+            assert float(ratio) in refused, "the expectation refuses where the quantile answers"
+        else:
+            assert float(ratio) in answered, "the quantile refuses where the expectation answers"
+    assert answered and refused
+    assert all(ratio > max(refused) for ratio in answered), "the boundary is not monotone"
+    # And it is where the ladder's docstring says it is.
+    assert -3.3 < max(refused) < -3.2
+
+
+def test_the_conditioning_failure_is_monotone_in_the_level() -> None:
+    """The fact the fix rests on: one evaluation validates a whole bracket.
+
+    `_reachable_ceiling` evaluates the exceedance at the ceiling and nowhere
+    else, which is only enough for the bisection below it if a level that
+    evaluates has an interval under it that evaluates too.
+    """
+    evaluable = []
+    refusing = []
+    for level in np.linspace(0.02, 8.0, 200):
+        try:
+            drawdown_exceedance(float(level), 252.0, LOSING_DRIFT, LOSING_DEVIATION)
+        except ValidationError:
+            refusing.append(float(level))
+        else:
+            evaluable.append(float(level))
+    assert evaluable and refusing
+    assert all(level < min(refusing) for level in evaluable)
+
+
+def test_loosening_the_cut_does_not_move_the_quantile() -> None:
+    """The ladder's own claim, which is why loosening is safe.
+
+    The cut is applied to a bound loose by a factor of two in the level, so a
+    cut of 1e-3 sits where the true exceedance is nearer 1e-12. A quantile
+    computed from a ceiling at each reachable cut therefore has to agree.
+    """
+    from holdout.drawdown import _INTEGRAL_CONDITIONING, _TAIL_CUTS, _reachable_ceiling
+
+    values = []
+    for cut in _TAIL_CUTS:
+        try:
+            ceiling = _reachable_ceiling(252.0, LOSING_DRIFT, LOSING_DEVIATION, cut)
+        except ValidationError:
+            continue
+        low, high = 0.0, ceiling
+        for _ in range(200):
+            mid = 0.5 * (low + high)
+            if mid <= low or mid >= high:
+                break
+            exceedance = drawdown_exceedance(
+                mid,
+                252.0,
+                LOSING_DRIFT,
+                LOSING_DEVIATION,
+                max_conditioning=_INTEGRAL_CONDITIONING,
+            )
+            if exceedance > 0.05:
+                low = mid
+            else:
+                high = mid
+        values.append(0.5 * (low + high))
+    assert len(values) >= 2, "only one cut was reachable, so this asserts nothing"
+    assert max(values) - min(values) < 1e-11
+
+
+def test_a_winning_record_was_never_affected() -> None:
+    """The tightest cut is reachable for a record with an edge, so nothing moved.
+
+    Both figures are the module's own answers before the ladder was fixed, bit
+    for bit: the change adds a domain rather than moving anything inside it.
+    """
+    assert drawdown_quantile(0.95, 252.0, 0.0008, 0.01) == 0.23497464164831106
+    assert drawdown_quantile(0.95, 252.0, 0.0, 0.01) == 0.35581165226776557
