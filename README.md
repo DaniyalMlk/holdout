@@ -1017,6 +1017,19 @@ integral and an inversion, whose error budgets absorb five orders more, and
 spending that carries the losing-side domain out to a total Sharpe ratio of
 -3.23.
 
+Both halves of that sentence have to be earned separately, and for a while only
+one was. The tail cut is loosened until the expansion can reach the ceiling, and
+the expected drawdown got that, because the step being retried evaluates the
+exceedance there. The inversion was handed the ceiling alone, which is closed
+form and cannot fail, so it ran at the tightest cut every time and the
+conditioning failures happened inside the bisection instead — where whether one
+happened at all depended on which midpoints the bisection visited, so the
+refusal fired at a total Sharpe ratio of -3.11 and not at -3.29. Both now share
+a ceiling the ladder has proved reachable, and the two domains end in the same
+place, between -3.225 and -3.250. What makes one evaluation enough for the whole
+bracket below it is that the conditioning failure is monotone in the level: on a
+200-point scan out to eight, nothing above the first refusal evaluates.
+
 ### Daily marks see less of the path than the path contains
 
 A drawdown read off 252 daily observations is smaller than the drawdown of the

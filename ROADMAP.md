@@ -749,3 +749,48 @@ margin, so a series that does not move returned a Sharpe ratio around 1e15
 instead of raising — in five of the six places that made the test. The sixth
 had the diagnosis in a comment. See the commit history for the sweep that now
 covers all of them.
+
+## Phase 20 — Two places the docstrings were ahead of the code
+
+Both of these are visible from `drawdown.py`'s own prose, which is what makes
+them worth doing together rather than separately: a module that documents a
+rule and then does something else is wrong twice, once in the answer and once
+in the reason a reader has for trusting it.
+
+- [x] `_reachable_ceiling`, so the tail-cut ladder loosens for the inversion as
+      it already did for the integral — the step it was handed was closed form
+      and could not raise, so the ladder returned the tightest cut every time
+- [x] The conditioning failure measured to be monotone in the level, which is
+      what makes one evaluation at the ceiling enough for the bracket under it,
+      rather than assumed and relied on
+- [x] The quantile's domain and the expectation's asserted to coincide point by
+      point over a sweep of the drift, and the boundary asserted monotone,
+      which the old one was not: it fired at a total Sharpe ratio of -3.11 and
+      not at -3.29, depending on which midpoints the bisection happened to visit
+- [x] A winning record's quantiles pinned bit for bit against what the module
+      returned before, so the change reads as adding a domain rather than
+      moving anything inside one
+- [x] The peak the last high-water mark at or before the trough, which is what
+      the docstring says and what `argmax` does not do
+- [x] The bracket asserted as a property rather than as an index — the peak is
+      the prefix's maximum and nothing between it and the trough is at its
+      level — over 300 records sprinkled with zeros, with a count asserting the
+      two readings really do differ on more than thirty of them
+- [x] The repository swept for the same first-or-last mistake, and the sweep's
+      result recorded
+- [x] Four ways of breaking the ladder and two of breaking the peak confirmed to
+      fail first
+
+What the measuring turned up. The quantile's refusal was not a domain edge at
+all. A domain edge is monotone in the drift; this one depended on where the
+bisection's midpoints fell relative to a ceiling that never moved, so it refused
+at -3.11, -3.13, -3.14 and -3.20 and answered at -3.29, -3.30 and -3.50. That
+non-monotonicity is the tell, and it is a better reason to look than the refusal
+itself was.
+
+The peak sweep came back nearly empty, which is the useful outcome. Ten other
+`argmax` and `nonzero` sites pick a best or worst column where ties are
+arbitrary and nothing documents a rule, and the trough and the recovery in the
+same function both want the first index and say so. One site, one contradiction.
+"I swept and this was the only one" is a stronger claim than "I fixed the one I
+found", and it is only available if the sweep is actually run.
