@@ -772,6 +772,30 @@ def _tail_ceiling(horizon: float, drift: float, volatility: float, cut: float) -
     )
 
 
+def _reachable_ceiling(horizon: float, drift: float, volatility: float, cut: float) -> float:
+    """:func:`_tail_ceiling`, having proved the expansion can reach it.
+
+    :func:`_tail_ceiling` is closed form and does not raise, so handing it to
+    :func:`_with_loosening_cut` on its own loosens nothing: the ladder returns
+    the tightest cut's ceiling every time, and the calls that blow the
+    conditioning budget happen afterwards, wherever that ceiling is then used.
+    This evaluates the exceedance *at* the ceiling, which is the call that
+    raises, so the cut the ladder settles on is one the expansion can reach --
+    which is what :data:`_TAIL_CUTS` says the ladder does.
+
+    One evaluation is enough for a whole bracket and not only for a point,
+    because the conditioning failure is monotone in the level: a ceiling that
+    evaluates has an interval below it that evaluates too. Measured rather than
+    assumed; the test scans the level past the first refusal and finds nothing
+    evaluable above it.
+    """
+    ceiling = _tail_ceiling(horizon, drift, volatility, cut)
+    drawdown_exceedance(
+        ceiling, horizon, drift, volatility, max_conditioning=_INTEGRAL_CONDITIONING
+    )
+    return ceiling
+
+
 def _integrate_tail(horizon: float, drift: float, volatility: float, cut: float) -> float:
     """Composite Gauss-Legendre of the exceedance over ``[0, ceiling]``."""
     ceiling = _tail_ceiling(horizon, drift, volatility, cut)
@@ -837,11 +861,15 @@ def drawdown_quantile(probability: float, horizon: float, drift: float, volatili
     think they are", and the answer is usually deeper than people guess.
 
     The exceedance is strictly decreasing in the level, so the inversion is a
-    bisection on a bracket found by doubling.
+    bisection on a bracket found by doubling. The bracket's upper end is a
+    ceiling the tail-cut ladder has proved the expansion can reach, which
+    matters for a losing record: the tightest cut puts the ceiling fifteen
+    standard deviations out, where the expansion is a cancellation, and the
+    bisection would walk into that on its way down.
     """
     check_parameters(horizon, volatility)
     check_probability(probability, "probability")
-    ceiling = _with_loosening_cut(lambda cut: _tail_ceiling(horizon, drift, volatility, cut))
+    ceiling = _with_loosening_cut(lambda cut: _reachable_ceiling(horizon, drift, volatility, cut))
     target = 1.0 - probability
     low, high = 0.0, ceiling
     for _ in range(200):
