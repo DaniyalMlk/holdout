@@ -91,7 +91,7 @@ def test_psr_rejects_bad_inputs() -> None:
         probabilistic_sharpe_ratio(0.1, 10.5)  # type: ignore[arg-type]
     with pytest.raises(ValidationError):
         probabilistic_sharpe_ratio(0.1, 100, benchmark=math.inf)
-    with pytest.raises(ValidationError, match="excess kurtosis"):
+    with pytest.raises(ValidationError, match="raw where excess was meant"):
         probabilistic_sharpe_ratio(0.1, 100, skewness=-1.0, kurtosis=0.5)
 
 
