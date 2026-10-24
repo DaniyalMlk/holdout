@@ -16,7 +16,8 @@ from holdout import (
     sharpe_ratio,
     sharpe_standard_error,
 )
-from holdout.sharpe import check_shape, sharpe_variance_term
+from holdout.moments import moments
+from holdout.sharpe import PEARSON_SLACK, check_shape, sharpe_variance_term
 
 
 def test_sharpe_ratio_by_hand() -> None:
@@ -185,3 +186,102 @@ def test_adjusted_sharpe_arguments() -> None:
         autocorrelation_adjusted_sharpe(x, 12.5)  # type: ignore[arg-type]
     with pytest.raises(ValidationError, match="max_lag"):
         autocorrelation_adjusted_sharpe(x, 12, max_lag=-1)
+
+
+# Pearson's inequality, and why its slack has to scale.
+#
+# A two-point distribution satisfies kurt = 1 + skew**2 with equality, so a
+# two-valued series sits exactly on the boundary and lands either side of it by
+# round-off. The bound is one at a symmetric record and twenty thousand at a
+# skewness of 141, so an absolute slack is generous at one end and meaningless
+# at the other.
+
+OLD_ABSOLUTE_SLACK = 1e-12
+
+
+def two_point(n: int, spikes: int, value: float) -> np.ndarray:
+    """A record flat on every day but ``spikes`` of them."""
+    series = np.zeros(n)
+    series[:spikes] = value
+    return series
+
+
+TWO_POINT_GRID = [
+    (n, spikes, value)
+    for n in (60, 252, 1000, 3200)
+    for spikes in (1, 2, 5)
+    for value in (1e-3, 0.01, 1.0, 17.0)
+]
+
+
+def test_a_record_flat_on_every_day_but_one_has_a_standard_error() -> None:
+    """The library's own moments were refused by the library's own check."""
+    series = two_point(368, 1, 0.01)
+    shape = moments(series)
+    bound = 1.0 + shape.skewness**2
+    # It is below the bound in floating point, and that is the whole input.
+    assert shape.kurtosis < bound
+    assert abs(shape.kurtosis - bound) == pytest.approx(1.25e-12, rel=0.2)
+    estimate = estimate_sharpe(series)
+    assert estimate.standard_error() == pytest.approx(0.02617066, rel=1e-6)
+    low, high = estimate.confidence_interval()
+    assert low < estimate.value < high
+
+
+def test_every_two_point_record_sits_on_the_bound_and_is_admitted() -> None:
+    """And the identity is asserted, since it is the reason they are all borderline."""
+    below = 0
+    worst_relative = 0.0
+    for n, spikes, value in TWO_POINT_GRID:
+        shape = moments(two_point(n, spikes, value))
+        bound = 1.0 + shape.skewness**2
+        # Equality in exact arithmetic, so the gap is round-off either way.
+        assert abs(shape.kurtosis - bound) / bound < 1e-13
+        check_shape(shape.skewness, shape.kurtosis)
+        if shape.kurtosis < bound:
+            below += 1
+            worst_relative = max(worst_relative, (bound - shape.kurtosis) / bound)
+    # Not a vacuous sweep: most of them really are on the wrong side.
+    assert below > len(TWO_POINT_GRID) // 2
+    assert worst_relative > 0.0
+    assert worst_relative < PEARSON_SLACK
+
+
+def test_the_absolute_slack_refused_some_of_them() -> None:
+    """The other half of the measurement, and what makes the shape the defect.
+
+    A slack that was merely too tight would refuse the same records at every
+    skewness. This one refuses them only once the bound is large enough for the
+    round-off to exceed a fixed amount, which is what makes it the wrong shape
+    rather than the wrong size.
+    """
+    refused = []
+    for n, spikes, value in TWO_POINT_GRID:
+        shape = moments(two_point(n, spikes, value))
+        if shape.kurtosis < 1.0 + shape.skewness**2 - OLD_ABSOLUTE_SLACK:
+            refused.append(1.0 + shape.skewness**2)
+    assert refused, "the grid no longer contains a record the old slack refused"
+    # And the ones it refused are the ones with the large bounds.
+    assert min(refused) > 100.0
+
+
+def test_the_slack_is_a_share_of_the_bound_at_both_ends_of_it() -> None:
+    for skewness in (0.0, 19.105, 141.411):
+        bound = 1.0 + skewness**2
+        check_shape(skewness, bound - 0.5 * PEARSON_SLACK * bound)
+        with pytest.raises(ValidationError, match="violates kurtosis"):
+            check_shape(skewness, bound - 2.0 * PEARSON_SLACK * bound)
+
+
+def test_excess_kurtosis_passed_as_raw_is_still_refused_at_every_skewness() -> None:
+    """Which is what the check is for, and the reason the slack cannot be large.
+
+    Raw and excess differ by 3, so relative to the bound they differ by
+    ``3 / (1 + skew**2)``. At the largest skewness a record in the grid above
+    reaches that is still five orders above the slack.
+    """
+    for skewness in (0.0, 1.5, 19.105, 141.411):
+        bound = 1.0 + skewness**2
+        with pytest.raises(ValidationError, match="raw where excess was meant"):
+            check_shape(skewness, bound - 3.0)
+        assert 3.0 / bound > 1e4 * PEARSON_SLACK
