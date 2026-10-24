@@ -61,7 +61,7 @@ def test_normal_case_is_lo() -> None:
 
 def test_impossible_moments_are_rejected() -> None:
     # Excess kurtosis 0 passed for a skewed series: no distribution has it.
-    with pytest.raises(ValidationError, match="excess kurtosis may have been passed"):
+    with pytest.raises(ValidationError, match="raw where excess was meant"):
         sharpe_standard_error(0.1, 250, skewness=-1.5, kurtosis=0.0)
     with pytest.raises(ValidationError, match="finite"):
         check_shape(math.nan, 3.0)

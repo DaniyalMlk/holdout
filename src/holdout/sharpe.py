@@ -42,6 +42,7 @@ from .series import (
 )
 
 __all__ = [
+    "PEARSON_SLACK",
     "SharpeRatio",
     "autocorrelation_adjusted_sharpe",
     "check_shape",
@@ -56,6 +57,30 @@ Method = Literal["normal", "mertens"]
 _NORMAL = NormalDist()
 
 
+#: Slack on Pearson's inequality, as a share of the bound rather than an amount.
+#:
+#: The bound is ``1 + skew**2``: one at a symmetric record and twenty thousand
+#: at a skewness of 141. The round-off in :func:`holdout.moments.moments`'
+#: power sums scales with it, so an absolute slack is the wrong shape --
+#: generous at a skewness of zero and meaningless at a skewness of twenty.
+#:
+#: Pearson holds with *equality* for every two-point distribution, so a series
+#: taking exactly two distinct values sits on the boundary and falls either
+#: side of it by round-off. Over 4,149 two-valued series -- exact ``zeros(n)``
+#: with ``k`` entries at ``v`` across five lengths, five counts and six values,
+#: plus 4,000 random two-valued records up to 20,000 observations -- 1,696 came
+#: out below the bound, the worst by 4.00e-11 *absolute* at a bound of 2.0e+04
+#: and by 9.99e-14 *relative*. This admits all of them with four orders to
+#: spare, where the absolute 1e-12 it replaces refused 24.
+#:
+#: And it stays clear of what the check is for. Raw and excess kurtosis differ
+#: by 3, which relative to the bound is ``3 / (1 + skew**2)``: 1.5e-4 even at
+#: the largest skewness in that scan, and not down to this slack until a
+#: skewness near 55,000, which a two-point series needs some three billion
+#: observations to reach.
+PEARSON_SLACK = 1e-9
+
+
 def check_shape(skewness: float, kurtosis: float) -> tuple[float, float]:
     """Validate a (skewness, raw kurtosis) pair as moments some distribution could have.
 
@@ -65,16 +90,25 @@ def check_shape(skewness: float, kurtosis: float) -> tuple[float, float]:
     the variance formulas built on it can go negative. Rejecting it here is
     what stops a confident-looking number being computed from impossible
     inputs.
+
+    The comparison carries :data:`PEARSON_SLACK` *of the bound* rather than a
+    fixed amount, because the bound is not of order one. A two-point
+    distribution satisfies Pearson with equality, so a two-valued series sits
+    on the boundary, and an absolute slack rejects it as soon as the bound is
+    large enough for the round-off to exceed the slack.
     """
     s = float(skewness)
     k = float(kurtosis)
     if not (math.isfinite(s) and math.isfinite(k)):
         raise ValidationError(f"skewness and kurtosis must be finite, got {s!r} and {k!r}")
-    if k < 1.0 + s * s - 1e-12:
+    bound = 1.0 + s * s
+    if k < bound - PEARSON_SLACK * bound:
         raise ValidationError(
-            f"kurtosis {k:g} with skewness {s:g} violates kurtosis >= 1 + skewness**2, "
-            "which every distribution satisfies; kurtosis is raw here (3 for a normal), "
-            "so an excess kurtosis may have been passed"
+            f"kurtosis {k:g} with skewness {s:g} violates kurtosis >= 1 + skewness**2 "
+            f"= {bound:g} by more than {PEARSON_SLACK:g} of it. Kurtosis is raw here "
+            "(3 for a normal), and raw where excess was meant is the usual cause: the "
+            "two differ by 3, which this slack is orders of magnitude under at any "
+            "skewness a record can produce"
         )
     return s, k
 
