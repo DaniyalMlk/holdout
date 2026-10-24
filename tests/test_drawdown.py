@@ -144,3 +144,72 @@ def test_dataclass_is_frozen() -> None:
     assert isinstance(worst, MaximumDrawdown)
     with pytest.raises(AttributeError):
         worst.depth = 0.0  # type: ignore[misc]
+
+
+# The peak is the *last* high-water mark at or before the trough, which is what
+# the docstring has always said and what `argmax` does not do. These assert the
+# property rather than the index: that the pair brackets a fall with nothing at
+# the peak's level inside it.
+
+
+def bracket_holds(returns: list[float]) -> bool:
+    """Whether the reported peak is the last high-water mark before the trough."""
+    worst = maximum_drawdown(returns)
+    curve = equity_curve(returns)
+    peak, trough = worst.peak_index, worst.trough_index
+    if curve[peak] != curve[: trough + 1].max():
+        return False
+    return all(curve[index] < curve[peak] for index in range(peak + 1, trough + 1))
+
+
+def test_flat_days_at_the_high_water_mark_are_not_part_of_the_fall() -> None:
+    """A strategy out of the market, then a loss. The flat days are not the fall."""
+    returns = [0.01, 0.0, 0.0, -0.05, 0.02]
+    worst = maximum_drawdown(returns)
+    assert worst.peak_index == 3
+    assert worst.trough_index == 4
+    assert bracket_holds(returns)
+    # Everything else is unchanged, because the peak's value is the same.
+    assert worst.depth == pytest.approx(0.05)
+    assert worst.recovery_index is None
+    assert worst.time_under_water == 2
+
+
+def test_the_first_high_water_mark_would_have_charged_the_flat_days_to_the_fall() -> None:
+    """What `argmax` returns, kept here so the test says what it is defending."""
+    returns = [0.01, 0.0, 0.0, -0.05, 0.02]
+    curve = equity_curve(returns)
+    trough = maximum_drawdown(returns).trough_index
+    first = int(np.argmax(curve[: trough + 1]))
+    assert first == 1
+    assert trough - first == 3
+    assert trough - maximum_drawdown(returns).peak_index == 1
+
+
+def test_the_bracket_holds_on_records_full_of_repeated_highs() -> None:
+    """Zeros make high-water marks repeat, which is the case that distinguishes them."""
+    generator = np.random.default_rng(20261024)
+    distinguishing = 0
+    for _ in range(300):
+        draws = generator.normal(0.0, 0.01, 60)
+        draws[generator.random(60) < 0.4] = 0.0
+        returns = [float(one) for one in draws]
+        assert bracket_holds(returns)
+        curve = equity_curve(returns)
+        trough = maximum_drawdown(returns).trough_index
+        if int(np.argmax(curve[: trough + 1])) != maximum_drawdown(returns).peak_index:
+            distinguishing += 1
+    # And the sweep is not vacuous: the two readings really do differ here.
+    assert distinguishing > 30
+
+
+def test_a_record_that_never_falls_still_reports_the_pair_together() -> None:
+    worst = maximum_drawdown([0.0, 0.0, 0.0])
+    assert worst.depth == 0.0
+    assert worst.peak_index == worst.trough_index
+
+
+def test_a_record_that_only_falls_peaks_at_the_start() -> None:
+    returns = [-0.01, -0.01, -0.01]
+    assert maximum_drawdown(returns).peak_index == 0
+    assert bracket_holds(returns)
