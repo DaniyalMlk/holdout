@@ -188,6 +188,13 @@ def deflated_sharpe_ratio(
     :func:`expected_maximum_sharpe` of the trials. ``sharpe`` is the selected
     strategy's per-period ratio over ``n`` periods; ``trials_variance`` is the
     per-period variance of all ``n_trials`` trials' ratios.
+
+    ``trials_mean`` is their cross-sectional mean and shifts the benchmark by
+    exactly that much. It is zero by default, which is the paper's null of no
+    skill among the trials and what :func:`deflate_trials` reports; supply it
+    when the trials are known to have a mean of their own, and the selected
+    strategy then has to clear the expected maximum of trials that already made
+    money.
     """
     benchmark = expected_maximum_sharpe(n_trials, trials_variance, mean=trials_mean, method=method)
     return probabilistic_sharpe_ratio(

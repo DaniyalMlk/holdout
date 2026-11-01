@@ -42,9 +42,7 @@ def off_diagonal(diagonal: float) -> NDArray[np.float64]:
     return np.array([[1.0 - diagonal, 0.3], [0.3, 1.0]])
 
 
-def largest_accepted(
-    build: object, tolerance: float, ceiling: float = 1e-3
-) -> float:
+def largest_accepted(build: object, tolerance: float, ceiling: float = 1e-3) -> float:
     """The largest deviation ``check_correlation`` still accepts, by bisection.
 
     ``build`` maps a deviation to a matrix. The search needs the deviation to be
