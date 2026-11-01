@@ -44,6 +44,7 @@ ROWS = (
     "CPCV path count against k/N x C(N, k), every N up to 12",
     "Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400",
     "The two excess-return conventions, constant rate, five rates to 40%",
+    "The asymmetry a validation tolerance accepts, three tolerances x three entry sizes",
     "50 pure-noise strategies, best selected, 200 runs",
     "30 crossover trials with a real edge, best selected, before and after financing",
 )
@@ -56,6 +57,7 @@ RESULTS = (
     "exact",
     "agree to 1e-14 relative, past where the tail itself underflows",
     "agree to 1e-12 relative, which is the identity they are",
+    "equal to the tolerance given, to 1e-6 relative, whatever the entry size",
     "PSR(0) > 95% in 90% of them, DSR > 95% in none",
     "DSR clears 0.95 gross and falls below 0.70 in excess of 5%, "
     "the financing haircut exceeding the search's own",
@@ -131,6 +133,7 @@ def test_every_figure_is_inside_the_bound_the_readme_states(
         "CPCV path count against k/N x C(N, k), every N up to 12": 0.0,
         "Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400": 1e-14,
         "The two excess-return conventions, constant rate, five rates to 40%": 1e-12,
+        "The asymmetry a validation tolerance accepts, three tolerances x three entry sizes": 1e-6,
         "50 pure-noise strategies, best selected, 200 runs": 0.0,
         "30 crossover trials with a real edge, best selected, before and after financing": 0.0,
     }
@@ -156,6 +159,39 @@ def test_the_noise_sweep_fools_the_naive_ratio_and_not_the_deflated_one(
     assert psr_hits / runs > 0.8
     assert f"in {psr_hits} runs out of" in readme, (
         f"the prose no longer states the measured count of {psr_hits}"
+    )
+
+
+def test_the_prose_counts_the_rows_it_actually_discusses(readme: str) -> None:
+    """A count in prose that nothing recomputes goes stale silently.
+
+    The section said "Three rows are worth a second look" above four such
+    paragraphs, having gained one without the sentence being reread. The number
+    is now read off the document: the paragraphs are the bolded leads between
+    that sentence and the end of the section, and the sentence has to agree
+    with how many there are.
+    """
+    words = {
+        "Two": 2,
+        "Three": 3,
+        "Four": 4,
+        "Five": 5,
+        "Six": 6,
+        "Seven": 7,
+        "Eight": 8,
+        "Nine": 9,
+        "Ten": 10,
+    }
+    stated = re.search(r"(\w+) rows are worth a second look", readme)
+    assert stated is not None, "the section no longer says how many rows it discusses"
+    claimed = words.get(stated.group(1))
+    assert claimed is not None, f"unexpected count word: {stated.group(1)!r}"
+
+    section = readme.split(stated.group(0), 1)[1]
+    section = section.split("\n## ", 1)[0]
+    paragraphs = re.findall(r"^\*\*", section, flags=re.MULTILINE)
+    assert len(paragraphs) == claimed, (
+        f"the prose says {claimed} rows are worth a second look and discusses {len(paragraphs)}"
     )
 
 

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import runpy
 import sys
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from io import StringIO
 from math import comb, sqrt
@@ -66,7 +67,10 @@ from holdout import (
     skewness,
     trial_correlation,
 )
+from holdout.exceptions import ValidationError
+from holdout.series import FloatArray
 from holdout.synthetic import crossover_sweep
+from holdout.trials import check_correlation
 
 #: The two figures Bailey and López de Prado publish for their worked example,
 #: in "The Deflated Sharpe Ratio" (2014).
@@ -323,6 +327,79 @@ def the_excess_conventions_agree_for_a_constant_rate() -> Check:
     )
 
 
+def the_validation_tolerance_is_the_bound_it_was_given() -> Check:
+    """What ``check_correlation``'s tolerance actually decides, by bisection.
+
+    A row about the library's own contract rather than about a quantity, and it
+    earns its place because the contract was broken: the comparison underneath
+    the symmetry and unit-diagonal checks kept numpy's default relative bound,
+    so the tolerance argument added about a thousandth to a bound of roughly
+    ``1e-5`` and could not tighten it at all. A matrix asymmetric by ``4e-6``
+    was accepted at ``tolerance=0.0`` and handed back symmetrised.
+
+    The bound is found by halving rather than derived from the comparison, and
+    two quantities are reported as one: the largest asymmetry accepted, and the
+    largest departure of a diagonal entry from one. Both must equal the
+    tolerance given, at three tolerances spanning four decades and at
+    off-diagonal entries of 0.1, 0.5 and 0.9 -- the spread of entry sizes is
+    the half a relative bound fails, by a factor of nine from end to end.
+
+    Quoted as a relative bound rather than as digits because the residue is
+    real: perturbing an entry of 0.9 by ``1e-10`` and storing the result as a
+    double does not move it by exactly ``1e-10``, so the accepted bound sits
+    within a few parts in ten million of the tolerance rather than on it. For
+    scale, the defect this row exists to catch shows up here as a deviation of
+    ten thousand, and a tolerance applied ten times too loosely as nine.
+    """
+    tolerances = (1e-10, 1e-8, 1e-6)
+    entries = (0.1, 0.5, 0.9)
+
+    def largest_accepted(
+        build: Callable[[float], FloatArray], tolerance: float, ceiling: float = 1e-3
+    ) -> float:
+        def accepted(deviation: float) -> bool:
+            try:
+                check_correlation(build(deviation), tolerance=tolerance)
+            except ValidationError:
+                return False
+            return True
+
+        # A bisection between two rejections, or two acceptances, returns one of
+        # its own bounds without ever measuring anything.
+        if not accepted(0.0) or accepted(ceiling):
+            raise AssertionError("the bisection's bounds do not bracket the boundary")
+        low, high = 0.0, ceiling
+        for _ in range(90):
+            middle = (low + high) / 2.0
+            if accepted(middle):
+                low = middle
+            else:
+                high = middle
+        return low
+
+    worst = 0.0
+    for tolerance in tolerances:
+        for rho in entries:
+
+            def asymmetric(deviation: float, rho: float = rho) -> FloatArray:
+                return np.array([[1.0, rho], [rho + deviation, 1.0]])
+
+            gap = largest_accepted(asymmetric, tolerance)
+            worst = max(worst, abs(gap - tolerance) / tolerance)
+
+        def uneven_diagonal(deviation: float) -> FloatArray:
+            return np.array([[1.0 - deviation, 0.3], [0.3, 1.0]])
+
+        unit = largest_accepted(uneven_diagonal, tolerance)
+        worst = max(worst, abs(unit - tolerance) / tolerance)
+    return Check(
+        label="The asymmetry a validation tolerance accepts, three tolerances x three entry sizes",
+        measured=worst,
+        bound=1e-6,
+        rendered="equal to the tolerance given, to 1e-6 relative, whatever the entry size",
+    )
+
+
 def financing_against_multiplicity() -> Check:
     """The second row that is a result rather than a cross-check.
 
@@ -387,6 +464,7 @@ def main() -> dict[str, object]:
         path_count_against_the_identity(),
         log_tail_against_scipy(),
         the_excess_conventions_agree_for_a_constant_rate(),
+        the_validation_tolerance_is_the_bound_it_was_given(),
         noise,
         financing_against_multiplicity(),
     ]
