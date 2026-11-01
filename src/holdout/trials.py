@@ -44,15 +44,36 @@ EffectiveMethod = Literal["average", "eigenvalue", "participation"]
 
 
 def check_correlation(matrix: ArrayLike, *, tolerance: float = 1e-8) -> FloatArray:
-    """Validate a correlation matrix: square, symmetric, unit diagonal, PSD."""
+    """Validate a correlation matrix: square, symmetric, unit diagonal, PSD.
+
+    ``tolerance`` is absolute and is the whole of the bound for the symmetry,
+    unit-diagonal and range checks: an asymmetry or a departure from one of more
+    than ``tolerance`` is an error whatever the size of the entry. The
+    positive-semi-definite check scales it by the dimension and floors it at
+    ``1e-10``, because an eigenvalue of a matrix assembled from correlations
+    rounded to a few decimal places carries rounding of that order however
+    strictly the caller wants the rest of the matrix read.
+
+    Within the tolerance the two off-diagonal entries of a pair are one number
+    measured twice, and their average is what comes back.
+    """
     c = np.asarray(matrix, dtype=np.float64)
     if c.ndim != 2 or c.shape[0] != c.shape[1] or c.shape[0] < 1:
         raise ValidationError(f"a correlation matrix must be square, got shape {c.shape}")
     if not np.all(np.isfinite(c)):
         raise ValidationError("the correlation matrix contains non-finite values")
-    if not np.allclose(c, c.T, atol=tolerance):
+    # `rtol=0.0` explicitly, or `tolerance` decides almost nothing. numpy's
+    # comparison is `|a - b| <= atol + rtol * |b|` and it keeps `rtol=1e-5`
+    # unless told otherwise, so with only `atol` wired up the relative term set
+    # the bound for every entry of a correlation matrix: at the documented
+    # default of 1e-8 an asymmetry of 9e-6 was accepted between two entries of
+    # 0.9, and the tolerance supplied a thousandth of that. The knob could
+    # loosen the check and not tighten it, and a caller passing a tight
+    # tolerance to reject a carelessly estimated matrix was handed back the
+    # symmetrised average instead of an error.
+    if not np.allclose(c, c.T, rtol=0.0, atol=tolerance):
         raise ValidationError("the correlation matrix is not symmetric")
-    if not np.allclose(np.diag(c), 1.0, atol=tolerance):
+    if not np.allclose(np.diag(c), 1.0, rtol=0.0, atol=tolerance):
         raise ValidationError("the correlation matrix must have ones on its diagonal")
     if np.any(np.abs(c) > 1.0 + tolerance):
         raise ValidationError("correlations must lie in [-1, 1]")
