@@ -839,3 +839,39 @@ eigenvalues are of order one by construction. So the lesson existed in
 `stability.py` and had not reached `sharpe.py` — the same shape as phase 19's
 epsilon margin, which was in one module for nine phases before the other five
 got it.
+
+## Phase 22 — A tolerance that could only ever loosen
+
+`check_correlation` takes a `tolerance` and names four properties it validates.
+Two of them — symmetry and the unit diagonal — were `np.allclose` calls, and
+`np.allclose` keeps `rtol=1e-5` unless told otherwise. Its comparison is
+`|a - b| <= atol + rtol * |b|`, so with only `atol` wired to the tolerance the
+relative term set the bound for every entry of a correlation matrix: the knob
+added about a thousandth to a bound of roughly `1e-5` and could not tighten it
+at all. The same shape as phase 21 from the other side — there a tolerance was
+absolute where the quantity was not of order one, here a tolerance was relative
+where the caller was promised an absolute one.
+
+- [x] Both comparisons passing `rtol=0.0`, so the tolerance is the whole of the
+      bound and the documented default of `1e-8` is the bound actually applied
+- [x] The bound measured by halving rather than derived from the comparison, and
+      pinned two ways: that it equals the tolerance given, and that it is the
+      same for entries of 0.1 and 0.9 — a relative bound fails the second by a
+      factor of nine, which is the half that distinguishes the two mistakes
+- [x] The diagonal half kept separate, and tested *below* one: a diagonal entry
+      above one is caught by the range check further down the function, which
+      hid the unit-diagonal check having no teeth
+- [x] The averaging the function performs on an accepted matrix documented
+      rather than removed — within the tolerance the pair is one number measured
+      twice — and the case that was wrong pinned: a caller asking for a tight
+      tolerance was handed the tidy average instead of the error
+- [x] `deflated_sharpe_ratio(trials_mean=)` exercised, the other option nothing
+      had ever supplied: an exact benchmark shift at five trial counts and both
+      methods, and a deflated ratio falling from 0.9822 to 0.0001 across a trial
+      mean of zero to 0.4
+- [x] The probe that found both of them made a gate, with no exemption
+      mechanism, counting positional arguments as choices
+- [x] A tenth evidence row for the accepted bound, and the section's prose count
+      of discussed rows read off the document after it had gone stale at four
+- [x] Seven ways of breaking it confirmed to fail first, plus the gate itself
+      broken by emptying the two test files that supply the options
