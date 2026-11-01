@@ -18,6 +18,7 @@ used here -- and both hold once the comparison is absolute.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -42,7 +43,9 @@ def off_diagonal(diagonal: float) -> NDArray[np.float64]:
     return np.array([[1.0 - diagonal, 0.3], [0.3, 1.0]])
 
 
-def largest_accepted(build: object, tolerance: float, ceiling: float = 1e-3) -> float:
+def largest_accepted(
+    build: Callable[[float], NDArray[np.float64]], tolerance: float, ceiling: float = 1e-3
+) -> float:
     """The largest deviation ``check_correlation`` still accepts, by bisection.
 
     ``build`` maps a deviation to a matrix. The search needs the deviation to be
@@ -50,11 +53,10 @@ def largest_accepted(build: object, tolerance: float, ceiling: float = 1e-3) -> 
     than assumed, because a bisection between two rejections or two acceptances
     silently returns one of its own bounds.
     """
-    make = build  # type: ignore[assignment]
 
     def accepted(deviation: float) -> bool:
         try:
-            check_correlation(make(deviation), tolerance=tolerance)  # type: ignore[operator]
+            check_correlation(build(deviation), tolerance=tolerance)
         except ValidationError:
             return False
         return True

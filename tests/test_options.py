@@ -141,9 +141,7 @@ def _survey() -> tuple[list[Option], dict[str, Signature], set[str]]:
                             _returned(statement.annotation, mentioned)
                     annotations[child.name] = mentioned
                     fields[child.name] = own
-                    signatures.setdefault(
-                        child.name, Signature(tuple(name for name, _ in own))
-                    )
+                    signatures.setdefault(child.name, Signature(tuple(name for name, _ in own)))
                     walk(child, child.name + ".")
 
         walk(tree)

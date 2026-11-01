@@ -17,12 +17,11 @@ See [ROADMAP.md](ROADMAP.md) for the build order.
 ## What is checked, and against what
 
 That claim is worth only as much as the evidence, so here it is before the
-install line. Six of these nine compare the library against a reference that
-shares no derivation with it, one is an identity the library has to hold
-against itself, and the last two are results rather than checks: they are the
-case for the library existing at all. All nine are produced by
-`examples/evidence.py`, which runs in CI and exits non-zero if any of them
-moves:
+install line. Six of these ten compare the library against a reference that
+shares no derivation with it, two are claims the library has to hold against
+itself, and the last two are results rather than checks: they are the case for
+the library existing at all. All ten are produced by `examples/evidence.py`,
+which runs in CI and exits non-zero if any of them moves:
 
 | Check | Result |
 | --- | --- |
@@ -33,6 +32,7 @@ moves:
 | CPCV path count against k/N x C(N, k), every N up to 12 | exact |
 | Log normal upper tail against scipy.stats.norm.logsf, z = 0.01 to 400 | agree to 1e-14 relative, past where the tail itself underflows |
 | The two excess-return conventions, constant rate, five rates to 40% | agree to 1e-12 relative, which is the identity they are |
+| The asymmetry a validation tolerance accepts, three tolerances x three entry sizes | equal to the tolerance given, to 1e-6 relative, whatever the entry size |
 | 50 pure-noise strategies, best selected, 200 runs | PSR(0) > 95% in 90% of them, DSR > 95% in none |
 | 30 crossover trials with a real edge, best selected, before and after financing | DSR clears 0.95 gross and falls below 0.70 in excess of 5%, the financing haircut exceeding the search's own |
 
@@ -42,7 +42,7 @@ depends on the SciPy and NumPy builds underneath — so a figure quoted to ten
 significant places is a number that happens to be true on the machine that
 measured it. The bound is the claim, and it is the bound the script enforces.
 
-Three rows are worth a second look.
+Five rows are worth a second look.
 
 **The quadrature row is quoted as a bound over the whole range for a reason.**
 At `n = 10**6` the reference is the *less* accurate of the pair: computing
@@ -58,6 +58,19 @@ sweep than about either implementation. The range matters as much as the bound:
 past `z ~ 38` the upper tail is zero in double precision, `log(1 - cdf)` is
 `-inf`, and only a routine that stays on the log scale throughout has anything
 left to report.
+
+**The tolerance row is about this library's own contract rather than about a
+quantity, and it is here because the contract was broken.** `check_correlation`
+takes a tolerance and names four properties it validates. Two of them were
+`np.allclose` calls, which keep a relative bound of 1e-5 unless told otherwise,
+so the tolerance only ever added about a thousandth to a bound of roughly 1e-5
+and could not tighten it: a matrix asymmetric by 4e-6 was accepted at
+`tolerance=0.0` and handed back symmetrised, and a diagonal entry of 0.999995
+was accepted at every tolerance there is. The row measures the accepted bound
+by halving rather than reading it off the comparison, and reports it at three
+tolerances and three entry sizes, because the half a relative bound fails is
+not the magnitude but the dependence on the entry: it was nine times larger
+between two entries of 0.9 than between two of 0.1.
 
 **The noise row is the whole argument.** Fifty strategies with no skill
 whatsoever, the best of them selected the way any search selects: the
@@ -81,7 +94,7 @@ about the BLAS underneath.
 python examples/evidence.py     # all nine, non-zero if a figure moves
 ```
 
-Behind them: 1,039 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 1,116 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
