@@ -81,7 +81,30 @@ def crossover_sweep(
     strategy is live over the same window. ``trend`` adds a slow sinusoidal
     drift that crossover rules can in principle exploit; with the default of
     zero there is nothing to find.
+
+    A pair is only backtested if the fast window is strictly shorter than the
+    slow one, so the grid offered is not always the grid run. Which pairs
+    survive is settled here, from the two tuples alone, before anything is
+    simulated: an empty ``fast`` or ``slow``, or a pair of tuples that between
+    them yield no valid combination, is a :class:`ValidationError` rather than
+    a failure inside the array arithmetic once the loop has produced nothing.
     """
+    if not fast:
+        raise ValidationError("fast must contain at least one window")
+    if not slow:
+        raise ValidationError("slow must contain at least one window")
+
+    # Settled from the parameters, not from the data. Deciding this after the
+    # simulation made an empty grid surface as a numpy concatenate error, and
+    # made what the caller was told depend on how far the loop had run.
+    grid = [(f, s) for f in fast for s in slow if f < s]
+    if not grid:
+        raise ValidationError(
+            f"no pair in fast={fast} is shorter than a window in slow={slow}, "
+            "so the grid is empty: a crossover needs a fast window strictly "
+            "shorter than its slow one"
+        )
+
     if n_days < 2 * max(slow):
         raise ValidationError(f"n_days must be at least {2 * max(slow)} for these windows")
     rng = as_generator(seed)
@@ -91,16 +114,12 @@ def crossover_sweep(
         t = np.arange(returns.size)
         returns = returns + trend * np.sin(2 * math.pi * t / 750.0)
     prices = np.cumsum(returns)  # log price
-    names, columns, grid = [], [], []
-    for f in fast:
-        for s in slow:
-            if f >= s:
-                continue
-            signal = np.sign(_moving_average(prices, f) - _moving_average(prices, s))
-            position = np.concatenate([[0.0], signal[:-1]])
-            columns.append((position * returns)[burn:])
-            names.append(f"ma{f}_{s}")
-            grid.append((f, s))
+    names, columns = [], []
+    for f, s in grid:
+        signal = np.sign(_moving_average(prices, f) - _moving_average(prices, s))
+        position = np.concatenate([[0.0], signal[:-1]])
+        columns.append((position * returns)[burn:])
+        names.append(f"ma{f}_{s}")
     values = np.column_stack(columns)
     index = [f"d{t:05d}" for t in range(values.shape[0])]
     return Sweep(
