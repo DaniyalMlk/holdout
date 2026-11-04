@@ -875,3 +875,32 @@ where the caller was promised an absolute one.
       of discussed rows read off the document after it had gone stale at four
 - [x] Seven ways of breaking it confirmed to fail first, plus the gate itself
       broken by emptying the two test files that supply the options
+
+## Phase 23 — A grid judged by its data rather than by itself
+
+- [x] `crossover_sweep` settles which pairs it will backtest from the two
+      window tuples, before anything is simulated, rather than discovering an
+      empty grid in `np.column_stack` after a full GARCH run of
+      `n_days + max(slow)` days
+- [x] The three degenerate grids named rather than leaked: an empty `fast`,
+      which was not checked at all; an empty `slow`, which raised out of
+      `max()` inside the `n_days` guard before that guard could say anything;
+      and a grid where no pair has the fast window strictly shorter than the
+      slow one, which is the documented filter removing everything
+- [x] All three are a `ValidationError` and so catchable as a `HoldoutError`,
+      where previously two were a bare numpy or builtin `ValueError` — the
+      distinction the exception hierarchy exists to make
+- [x] Byte-identical for every grid that was already valid: parameters, names,
+      values and market all hash the same across four configurations including
+      a trend and a non-default seed, because the pair list is built in the
+      same nesting order as the loop it replaces
+- [x] Pairs kept asserted against pairs offered rather than assumed — 30 of 30
+      for the default grid, 2 of 4 where a fast window outruns both slow ones,
+      6 of 9 for interleaved tuples — with the column order pinned, since a
+      sweep's winner is chosen by index
+- [x] Precedence pinned for an input that is wrong twice over: an empty grid is
+      reported ahead of a short `n_days`, because no sample length makes an
+      empty grid backtestable. Added after a mutation that reordered the two
+      adjacent guards got past the first draft of the suite
+- [x] Seven ways of putting it back, seven caught, including the grid check
+      moved back after the simulation and the pair filter relaxed to `<=`
