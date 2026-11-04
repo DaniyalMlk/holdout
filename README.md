@@ -94,7 +94,7 @@ about the BLAS underneath.
 python examples/evidence.py     # all nine, non-zero if a figure moves
 ```
 
-Behind them: 1,116 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 1,127 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
