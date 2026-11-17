@@ -951,12 +951,64 @@ which is tested on its own. Neither test is wrong and neither can see it.
 
 ### What is still not asserted
 
-Two names reach the root without appearing in any module's `__all__`, so the
-containment above is not an equality. Thirteen modules also define a public name
-they have not declared — `bootstrap.Seed`, `deflated.MaximumMethod`,
+*Closed by the phase below.* Two names reach the root without appearing in any
+module's `__all__`, so the containment above is not an equality. Thirteen
+modules also define a public name they have not declared — `bootstrap.Seed`, `deflated.MaximumMethod`,
 `drawdown.check_parameters`, `multiple.Adjustment` and `SingleStep`,
 `pairwise.MINIMUM_OBSERVATIONS`, `pbo.Metric`, `selection.FloatArray`,
 `sequential.NORMAL_95`, `sharpe.Method`, `splits.IndexArray`,
 `stability.MINIMUM_SIDE` and `VARIANCE_FLOOR`, `trials.EffectiveMethod`.
 Completing those in the modules is what turns the containment into an equality;
 deciding it here would put the judgement back in the gate.
+
+## Phase 25 — The aliases that say what a parameter accepts
+
+- [x] Thirteen names a module defines and its own `__all__` omitted, now
+      declared and — for the eleven not already there — re-exported
+- [x] Nine of the thirteen are type aliases stating the legal values of a
+      documented parameter: `multiple.Adjustment` and `SingleStep`,
+      `sharpe.Method`, `deflated.MaximumMethod`, `trials.EffectiveMethod`,
+      `pbo.Metric`, `bootstrap.Seed`, and the `FloatArray` and `IndexArray`
+      duplicates in `selection` and `splits`
+- [x] `holdout.Adjustment` reads
+      `Literal["bonferroni", "sidak", "holm", "bh", "by"]`, which the README has
+      been carrying in a comment beside `adjust_pvalues` because the alias the
+      type system already states could not be imported
+- [x] The four constants and one function that went with them:
+      `pairwise.MINIMUM_OBSERVATIONS`, `sequential.NORMAL_95`,
+      `stability.MINIMUM_SIDE`, `stability.VARIANCE_FLOOR` and
+      `drawdown.check_parameters`
+- [x] The root asserted to be exactly the union of the modules' declarations
+      plus `__version__`, so a name the root offers and no module claims fails
+      as well as the other way round
+- [x] A module's `__all__` required to contain every public name the module
+      defines, which catches the next omission at the module instead of letting
+      it travel to the root
+- [x] The probe reading source with `ast` rather than attributes, and tested
+      against source written for it rather than only against the package
+
+### Why none of this needed a judgement
+
+The previous phase stopped at containment on purpose: asserting the equality
+meant deciding, in the gate, which names were public. Reading them answered it
+instead. Nine were aliases whose whole content is a list of accepted values, and
+one of those lists is duplicated in the README's prose — so declaring them
+recorded what the code already said. `selection.FloatArray` and
+`splits.IndexArray` duplicate definitions in `series` and `uniqueness`; both
+pairs were confirmed equal, so they add nothing new to the root.
+
+### Why the probe reads source and not attributes
+
+The obvious implementation asks the imported module which attributes it defines
+rather than imports, and the usual test for that is `obj.__module__`. A bare
+`int`, `float` or `Literal` alias does not have one. Nine of these thirteen are
+exactly that, so an attribute sweep is blind to the cases this phase was written
+for.
+
+Three of the probe's branches are the only ones `src/holdout` exercises: plain
+functions, classes and plain assignments. Nothing here declares an `async def`
+or an annotated assignment at the top level, and none assigns two names in one
+statement, so those paths were carried by reading until now. They are run
+against a source string written for the purpose, with the exclusions asserted as
+well as the inclusions — a probe that counted imports would report every module
+as failing to declare `math`.
