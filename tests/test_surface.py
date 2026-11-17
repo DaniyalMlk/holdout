@@ -34,19 +34,34 @@ makes the gate wrong whenever a module changes its mind. What is asserted is a
 disagreement *inside* the package: a module declaring a name public while the
 root does not carry it.
 
-**Containment, not equality.** Two names reach the root without appearing in
-any module's ``__all__``. Asserting the equality would mean ruling on those
-here, which is the judgement this file refuses to make; and thirteen modules
-still define a public name they have not declared, which belongs in the modules
-rather than in a gate. Both are recorded in ``ROADMAP.md`` as what this phase
-leaves open.
+**Equality, now that the modules can carry it.** It could not be asserted
+before: thirteen modules defined a public name their own ``__all__`` omitted,
+so requiring the root to be *exactly* the union would have meant ruling on
+those here. Nine of the thirteen turned out to be type aliases stating the
+legal values of a documented parameter — ``Adjustment`` is
+``Literal["bonferroni", "sidak", "holm", "bh", "by"]``, which the README was
+carrying in a comment — so declaring them was recording what the code already
+said rather than deciding anything.
+
+That makes a third claim available, and it is the one that catches the next
+omission rather than this one: **a module's ``__all__`` contains every public
+name the module defines.** A name added and not declared fails at the module,
+instead of travelling to the root for somebody to notice.
+
+The probe for it reads source with :mod:`ast` rather than the imported module.
+An attribute sweep has to decide which attributes a module *defines* as opposed
+to imports, and the usual test — ``obj.__module__`` — does not exist on a bare
+``int``, ``float`` or ``Literal`` alias. Nine of these thirteen are exactly
+that, so the attribute route is blind to the cases this was written for.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib
 import pkgutil
 from collections import Counter
+from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -62,6 +77,69 @@ NOT_SURFACE = frozenset({"cli", "__main__"})
 #: a new module arriving without one is a decision somebody makes here instead
 #: of a silent exemption from every check in this file.
 NO_DUNDER_ALL: frozenset[str] = frozenset()
+
+#: Names in the root's ``__all__`` that no module declares. ``__version__`` is
+#: assigned in ``__init__.py`` itself, so it is the one legitimate entry.
+ROOT_ONLY = frozenset({"__version__"})
+
+#: Source written to exercise :func:`public_names_in`, not to be a module.
+PROBE_SOURCE = '''
+"""A docstring, which defines nothing."""
+
+from __future__ import annotations
+
+import math                      # an import is not a definition
+from typing import Literal
+
+PUBLIC_CONSTANT = 1.0            # a bare float: no __module__ to sweep by
+Choice = Literal["a", "b"]       # an alias: likewise
+ANNOTATED: int = 2               # an annotated assignment
+PAIR_ONE = PAIR_TWO = 3          # one statement, two names
+_PRIVATE = 4                     # underscore: not public
+__all__ = ["PUBLIC_CONSTANT"]    # the declaration is never a definition
+
+
+def public_function() -> None:
+    """A function."""
+    local_name = 5               # a name in a body is not top level
+    return None
+
+
+async def public_coroutine() -> None:
+    """An async function, which this package has none of."""
+
+
+class PublicClass:
+    """A class."""
+
+    attribute = 6                # a class attribute is not a module name
+'''
+
+
+def public_names_in(source: str) -> frozenset[str]:
+    """The public top-level names a piece of module source defines.
+
+    Separated from the file it usually reads so that it can be tested against
+    source written for the purpose.
+    """
+    found: set[str] = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names = [node.name]
+        elif isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+        else:
+            continue
+        found.update(name for name in names if not name.startswith("_") and name != "__all__")
+    return frozenset(found)
+
+
+def public_definitions(module: str) -> frozenset[str]:
+    """Every public name a module defines at its top level, read from source."""
+    source = Path(__file__).resolve().parent.parent / "src" / "holdout" / f"{module}.py"
+    return public_names_in(source.read_text(encoding="utf-8"))
 
 
 def submodules() -> dict[str, ModuleType]:
@@ -197,3 +275,71 @@ def test_the_probe_reads_a_surface_worth_checking(root: frozenset[str]) -> None:
     assert len(root) >= 120, f"the root surface came back as {len(root)} names"
     assert "io" in modules, "the io module was not read"
     assert {"read_returns_csv", "write_returns_csv", "ReturnTable"} <= modules["io"]
+
+
+def test_a_module_declares_every_public_name_it_defines() -> None:
+    """``__all__`` is not a curated subset of what the module defines.
+
+    This is the assertion that catches the *next* omission rather than the
+    last one: a name added to a module and left out of its ``__all__`` fails
+    here, at the module, instead of reaching the root check as a name nobody
+    wired in.
+
+    Thirteen names failed it, nine of them type aliases stating the legal
+    values of a documented parameter.
+    """
+    undeclared: dict[str, list[str]] = {}
+    for module, names in declared().items():
+        missing = sorted(public_definitions(module) - names)
+        if missing:
+            undeclared[module] = missing
+    assert not undeclared, (
+        f"defined at a module's top level and absent from its own __all__: {undeclared}"
+    )
+
+
+def test_the_root_is_exactly_the_union_of_the_declarations(
+    root: frozenset[str],
+) -> None:
+    """Equality, not containment.
+
+    Containment catches a name the root is missing. This catches the other
+    direction — a name the root offers that no module claims — which is what a
+    hand-kept list accumulates: an entry left behind by a rename, or one
+    exported from the wrong place.
+    """
+    union = frozenset().union(*declared().values())
+    assert root == union | ROOT_ONLY, (
+        f"only at the root: {sorted(root - union - ROOT_ONLY)}; "
+        f"only in a module: {sorted(union - root)}"
+    )
+
+
+def test_the_probe_reads_each_kind_of_definition_and_skips_each_non_definition() -> None:
+    """The probe, against source written for it.
+
+    The package exercises only three of this function's branches: plain
+    functions, classes and plain assignments. Nothing in ``src/holdout``
+    declares an ``async def`` or an annotated assignment at the top level, and
+    nothing assigns two names in one statement, so those paths were carried by
+    reading rather than by running.
+
+    The exclusions matter as much as the inclusions. A probe that counted
+    imports would report every module as failing to declare ``math``; one that
+    counted names inside function bodies would report ``local_name``; one that
+    missed ``__all__`` itself would have every module failing to declare its
+    own declaration.
+    """
+    found = public_names_in(PROBE_SOURCE)
+    assert found == {
+        "PUBLIC_CONSTANT",
+        "Choice",
+        "ANNOTATED",
+        "PAIR_ONE",
+        "PAIR_TWO",
+        "public_function",
+        "public_coroutine",
+        "PublicClass",
+    }, f"the probe read {sorted(found)}"
+    for absent in ("math", "Literal", "_PRIVATE", "__all__", "local_name", "attribute"):
+        assert absent not in found, f"the probe counted {absent!r} as a definition"
