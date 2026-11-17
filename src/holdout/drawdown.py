@@ -46,6 +46,7 @@ __all__ = [
     "DrawdownSpectrum",
     "MaximumDrawdown",
     "assess_drawdown",
+    "check_parameters",
     "drawdown_exceedance",
     "drawdown_quantile",
     "drawdown_series",

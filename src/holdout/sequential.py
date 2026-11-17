@@ -78,6 +78,7 @@ from .exceptions import InsufficientDataError, ValidationError
 from .series import FloatArray, as_returns, check_periods_per_year, check_probability
 
 __all__ = [
+    "NORMAL_95",
     "AnytimeBound",
     "ConfidenceSequence",
     "confidence_sequence",

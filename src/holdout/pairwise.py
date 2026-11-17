@@ -64,6 +64,7 @@ from .exceptions import InsufficientDataError, ValidationError
 from .series import FloatArray, as_returns, check_periods_per_year, constant_floor
 
 __all__ = [
+    "MINIMUM_OBSERVATIONS",
     "SharpeDifference",
     "VarianceMethod",
     "newey_west_bandwidth",

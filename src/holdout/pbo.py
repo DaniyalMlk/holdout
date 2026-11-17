@@ -40,7 +40,12 @@ from numpy.typing import ArrayLike, NDArray
 from .exceptions import InsufficientDataError, ValidationError
 from .series import FloatArray, as_matrix
 
-__all__ = ["PBOResult", "cscv_partitions", "probability_of_backtest_overfitting"]
+__all__ = [
+    "Metric",
+    "PBOResult",
+    "cscv_partitions",
+    "probability_of_backtest_overfitting",
+]
 
 Metric = Literal["sharpe", "mean"] | Callable[[FloatArray], FloatArray]
 _MAX_PARTITIONS = 1_000_000

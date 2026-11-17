@@ -35,7 +35,9 @@ from .exceptions import ValidationError
 from .series import FloatArray, check_probability
 
 __all__ = [
+    "Adjustment",
     "Haircut",
+    "SingleStep",
     "adjust_pvalues",
     "haircut_sharpe",
     "haircut_sharpe_ratios",

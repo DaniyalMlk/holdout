@@ -34,6 +34,7 @@ from .sharpe import SharpeRatio, estimate_sharpe, sharpe_variance_term
 __all__ = [
     "EULER_MASCHERONI",
     "DeflatedSharpe",
+    "MaximumMethod",
     "deflate_trials",
     "deflated_sharpe_ratio",
     "expected_maximum_normal",
