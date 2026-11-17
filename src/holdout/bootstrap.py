@@ -32,6 +32,7 @@ from .series import FloatArray, as_matrix, as_returns
 
 __all__ = [
     "ColumnMeans",
+    "Seed",
     "as_generator",
     "bootstrap_column_means",
     "optimal_block_length",

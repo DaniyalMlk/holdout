@@ -43,6 +43,7 @@ from .series import (
 
 __all__ = [
     "PEARSON_SLACK",
+    "Method",
     "SharpeRatio",
     "autocorrelation_adjusted_sharpe",
     "check_shape",

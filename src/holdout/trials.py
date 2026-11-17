@@ -38,7 +38,12 @@ from numpy.typing import ArrayLike
 from .exceptions import ValidationError
 from .series import FloatArray, as_matrix, constant_floor
 
-__all__ = ["check_correlation", "effective_number_of_trials", "trial_correlation"]
+__all__ = [
+    "EffectiveMethod",
+    "check_correlation",
+    "effective_number_of_trials",
+    "trial_correlation",
+]
 
 EffectiveMethod = Literal["average", "eigenvalue", "participation"]
 

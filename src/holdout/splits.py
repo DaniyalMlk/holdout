@@ -38,6 +38,7 @@ from .series import FloatArray
 
 __all__ = [
     "CombinatorialPurgedCV",
+    "IndexArray",
     "LeakageError",
     "Split",
     "combinatorial_purged_cv",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .bootstrap import (
     ColumnMeans,
+    Seed,
     as_generator,
     bootstrap_column_means,
     optimal_block_length,
@@ -12,6 +13,7 @@ from .bootstrap import (
 from .deflated import (
     EULER_MASCHERONI,
     DeflatedSharpe,
+    MaximumMethod,
     deflate_trials,
     deflated_sharpe_ratio,
     expected_maximum_normal,
@@ -25,6 +27,7 @@ from .drawdown import (
     DrawdownSpectrum,
     MaximumDrawdown,
     assess_drawdown,
+    check_parameters,
     drawdown_exceedance,
     drawdown_quantile,
     drawdown_series,
@@ -60,7 +63,9 @@ from .io import (
 from .mcs import Elimination, ModelConfidenceSet, Statistic, model_confidence_set
 from .moments import Moments, autocorrelation, kurtosis, moments, skewness
 from .multiple import (
+    Adjustment,
     Haircut,
+    SingleStep,
     adjust_pvalues,
     haircut_sharpe,
     haircut_sharpe_ratios,
@@ -69,13 +74,19 @@ from .multiple import (
     sharpe_pvalue,
 )
 from .pairwise import (
+    MINIMUM_OBSERVATIONS,
     SharpeDifference,
     VarianceMethod,
     newey_west_bandwidth,
     newey_west_covariance,
     sharpe_difference,
 )
-from .pbo import PBOResult, cscv_partitions, probability_of_backtest_overfitting
+from .pbo import (
+    Metric,
+    PBOResult,
+    cscv_partitions,
+    probability_of_backtest_overfitting,
+)
 from .selection import (
     LOG_TAIL_ASYMPTOTIC_FROM,
     ConditionalInterval,
@@ -113,6 +124,7 @@ from .series import (
 )
 from .sharpe import (
     PEARSON_SLACK,
+    Method,
     SharpeRatio,
     autocorrelation_adjusted_sharpe,
     check_shape,
@@ -143,6 +155,8 @@ from .splits import (
 )
 from .stability import (
     DEFAULT_TRIM,
+    MINIMUM_SIDE,
+    VARIANCE_FLOOR,
     BreakStatistics,
     SharpeBreak,
     break_statistics,
@@ -154,6 +168,7 @@ from .synthetic import (
     garch_returns,
 )
 from .trials import (
+    EffectiveMethod,
     check_correlation,
     effective_number_of_trials,
     trial_correlation,
@@ -179,8 +194,12 @@ __all__ = [
     "EULER_MASCHERONI",
     "LOG_TAIL_ASYMPTOTIC_FROM",
     "MAX_MODES",
+    "MINIMUM_OBSERVATIONS",
+    "MINIMUM_SIDE",
     "NORMAL_95",
     "PEARSON_SLACK",
+    "VARIANCE_FLOOR",
+    "Adjustment",
     "AnytimeBound",
     "BreakStatistics",
     "ColumnMeans",
@@ -192,6 +211,7 @@ __all__ = [
     "DeflatedSharpe",
     "DrawdownAssessment",
     "DrawdownSpectrum",
+    "EffectiveMethod",
     "Elimination",
     "ExcessConvention",
     "FinancingImpact",
@@ -202,6 +222,9 @@ __all__ = [
     "InsufficientDataError",
     "LeakageError",
     "MaximumDrawdown",
+    "MaximumMethod",
+    "Method",
+    "Metric",
     "ModelConfidenceSet",
     "Moments",
     "PBOResult",
@@ -209,6 +232,7 @@ __all__ = [
     "ReturnTable",
     "RomanoWolf",
     "SPATest",
+    "Seed",
     "Selected",
     "SelectionInference",
     "SelectionUnderFinancing",
@@ -216,6 +240,7 @@ __all__ = [
     "SharpeBreak",
     "SharpeDifference",
     "SharpeRatio",
+    "SingleStep",
     "Split",
     "Statistic",
     "Sweep",
@@ -235,6 +260,7 @@ __all__ = [
     "break_statistics",
     "check_correlation",
     "check_labels",
+    "check_parameters",
     "check_periods_per_year",
     "check_probability",
     "check_shape",

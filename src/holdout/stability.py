@@ -83,6 +83,8 @@ from .series import FloatArray, as_returns, check_probability, constant_floor
 
 __all__ = [
     "DEFAULT_TRIM",
+    "MINIMUM_SIDE",
+    "VARIANCE_FLOOR",
     "BreakStatistics",
     "SharpeBreak",
     "break_statistics",

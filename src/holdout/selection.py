@@ -110,6 +110,7 @@ FloatArray = NDArray[np.float64]
 __all__ = [
     "LOG_TAIL_ASYMPTOTIC_FROM",
     "ConditionalInterval",
+    "FloatArray",
     "Selected",
     "SelectionInference",
     "conditional_interval",
