@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from .bootstrap import (
     ColumnMeans,
+    as_generator,
     bootstrap_column_means,
     optimal_block_length,
     stationary_bootstrap_indices,
 )
 from .deflated import (
+    EULER_MASCHERONI,
     DeflatedSharpe,
     deflate_trials,
     deflated_sharpe_ratio,
@@ -50,6 +52,11 @@ from .financing import (
     period_rate,
     selection_under_financing,
 )
+from .io import (
+    ReturnTable,
+    read_returns_csv,
+    write_returns_csv,
+)
 from .mcs import Elimination, ModelConfidenceSet, Statistic, model_confidence_set
 from .moments import Moments, autocorrelation, kurtosis, moments, skewness
 from .multiple import (
@@ -59,6 +66,7 @@ from .multiple import (
     haircut_sharpe_ratios,
     minimum_sharpe,
     minimum_t_statistic,
+    sharpe_pvalue,
 )
 from .pairwise import (
     SharpeDifference,
@@ -93,14 +101,26 @@ from .sequential import (
     peeking_rejection_rate,
     sequential_track_record_length,
 )
-from .series import as_matrix, as_returns
+from .series import (
+    CONSTANT_TOLERANCE,
+    FloatArray,
+    as_matrix,
+    as_returns,
+    check_labels,
+    check_periods_per_year,
+    check_probability,
+    constant_floor,
+)
 from .sharpe import (
+    PEARSON_SLACK,
     SharpeRatio,
     autocorrelation_adjusted_sharpe,
+    check_shape,
     estimate_sharpe,
     serial_correlation_factor,
     sharpe_ratio,
     sharpe_standard_error,
+    sharpe_variance_term,
 )
 from .spa import (
     RealityCheck,
@@ -128,9 +148,19 @@ from .stability import (
     break_statistics,
     sharpe_break,
 )
-from .trials import effective_number_of_trials, trial_correlation
+from .synthetic import (
+    Sweep,
+    crossover_sweep,
+    garch_returns,
+)
+from .trials import (
+    check_correlation,
+    effective_number_of_trials,
+    trial_correlation,
+)
 from .uniqueness import (
     Concurrency,
+    IndexArray,
     SequentialDraw,
     average_uniqueness,
     concurrency,
@@ -144,10 +174,13 @@ from .uniqueness import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "CONSTANT_TOLERANCE",
     "DEFAULT_TRIM",
+    "EULER_MASCHERONI",
     "LOG_TAIL_ASYMPTOTIC_FROM",
     "MAX_MODES",
     "NORMAL_95",
+    "PEARSON_SLACK",
     "AnytimeBound",
     "BreakStatistics",
     "ColumnMeans",
@@ -162,8 +195,10 @@ __all__ = [
     "Elimination",
     "ExcessConvention",
     "FinancingImpact",
+    "FloatArray",
     "Haircut",
     "HoldoutError",
+    "IndexArray",
     "InsufficientDataError",
     "LeakageError",
     "MaximumDrawdown",
@@ -171,6 +206,7 @@ __all__ = [
     "Moments",
     "PBOResult",
     "RealityCheck",
+    "ReturnTable",
     "RomanoWolf",
     "SPATest",
     "Selected",
@@ -182,11 +218,13 @@ __all__ = [
     "SharpeRatio",
     "Split",
     "Statistic",
+    "Sweep",
     "ValidationError",
     "VarianceMethod",
     "__version__",
     "adjust_pvalues",
     "annual_rate",
+    "as_generator",
     "as_matrix",
     "as_returns",
     "assess_drawdown",
@@ -195,10 +233,17 @@ __all__ = [
     "average_uniqueness",
     "bootstrap_column_means",
     "break_statistics",
+    "check_correlation",
+    "check_labels",
+    "check_periods_per_year",
+    "check_probability",
+    "check_shape",
     "combinatorial_purged_cv",
     "concurrency",
     "conditional_interval",
     "confidence_sequence",
+    "constant_floor",
+    "crossover_sweep",
     "cscv_partitions",
     "deflate_trials",
     "deflated_sharpe_ratio",
@@ -220,6 +265,7 @@ __all__ = [
     "final_drawdown_exceedance",
     "financing_impact",
     "financing_shifts",
+    "garch_returns",
     "haircut_sharpe",
     "haircut_sharpe_ratios",
     "kfold",
@@ -249,6 +295,7 @@ __all__ = [
     "probabilistic_sharpe_ratio",
     "probability_of_backtest_overfitting",
     "purged_kfold",
+    "read_returns_csv",
     "reality_check",
     "romano_wolf",
     "select_best",
@@ -260,8 +307,10 @@ __all__ = [
     "serial_correlation_factor",
     "sharpe_break",
     "sharpe_difference",
+    "sharpe_pvalue",
     "sharpe_ratio",
     "sharpe_standard_error",
+    "sharpe_variance_term",
     "skewness",
     "stationary_bootstrap_indices",
     "superior_predictive_ability",
@@ -270,4 +319,5 @@ __all__ = [
     "truncated_tail",
     "uniqueness_weights",
     "walk_forward",
+    "write_returns_csv",
 ]

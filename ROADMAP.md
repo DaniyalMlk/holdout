@@ -904,3 +904,59 @@ where the caller was promised an absolute one.
       adjacent guards got past the first draft of the suite
 - [x] Seven ways of putting it back, seven caught, including the grid check
       moved back after the simulation and the pair filter relaxed to `<=`
+
+## Phase 24 — The way into the library is at the root
+
+- [x] `io` re-exported from the package root, which it never was: `ReturnTable`,
+      `read_returns_csv` and `write_returns_csv` are how a caller gets their own
+      returns in, and `holdout.read_returns_csv` raised `AttributeError` after a
+      README whose opening line is `import holdout`
+- [x] `synthetic` the same way — `Sweep`, `crossover_sweep`, `garch_returns` —
+      a second module with no import line in `__init__.py` at all
+- [x] Fourteen more names missing one at a time from modules otherwise wired in:
+      `series` declared eight and the root carried two, `sharpe` declared nine
+      and carried six, plus `uniqueness.IndexArray`, `deflated.EULER_MASCHERONI`,
+      `multiple.sharpe_pvalue`, `trials.check_correlation` and
+      `bootstrap.as_generator`
+- [x] `FloatArray` and `IndexArray` among them, the array aliases this package's
+      own signatures are written in, so a caller could call the functions and
+      not annotate against them
+- [x] The surface recomputed from the modules rather than compared against a
+      second hand-kept list, with a module's own `__all__` as the authority so
+      the judgement about what is public stays beside the code it is about
+- [x] A module absent from the root entirely reported as the module, not as its
+      names one at a time
+- [x] The entry point and the two aliases given named assertions of their own,
+      because containment reports them as three of twenty and does not say what
+      broke
+- [x] An `__all__` entry that is not an attribute refused, a repeated entry
+      refused, and the set of modules carrying no `__all__` pinned — empty here,
+      so a module arriving without one fails rather than being exempt
+
+### Why neither place that could have caught it did
+
+`tests/test_io.py` opens with `from holdout.io import ReturnTable,
+read_returns_csv, write_returns_csv`. A submodule import is the right style for
+a test and exactly the style that cannot see a missing re-export: the module is
+exercised in full and the surface it is absent from is never touched. 1,127
+tests, none of which read `holdout.__all__`.
+
+The README could not catch it either, because it never shows the CSV reader. Its
+thirteen other examples all write `from holdout import ...`, so the house style
+is the root and the one entry point a new user needs was in neither the style
+nor the documentation.
+
+That is the general shape worth remembering: a gap between two things, each of
+which is tested on its own. Neither test is wrong and neither can see it.
+
+### What is still not asserted
+
+Two names reach the root without appearing in any module's `__all__`, so the
+containment above is not an equality. Thirteen modules also define a public name
+they have not declared — `bootstrap.Seed`, `deflated.MaximumMethod`,
+`drawdown.check_parameters`, `multiple.Adjustment` and `SingleStep`,
+`pairwise.MINIMUM_OBSERVATIONS`, `pbo.Metric`, `selection.FloatArray`,
+`sequential.NORMAL_95`, `sharpe.Method`, `splits.IndexArray`,
+`stability.MINIMUM_SIDE` and `VARIANCE_FLOOR`, `trials.EffectiveMethod`.
+Completing those in the modules is what turns the containment into an equality;
+deciding it here would put the judgement back in the gate.
