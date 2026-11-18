@@ -202,8 +202,15 @@ def test_the_suite_size_on_the_front_page_is_not_wildly_stale() -> None:
     trains people to update the number without reading it. A quarter either way
     still catches the README claiming hundreds when there are thousands, which
     is the error that matters.
+
+    The pattern is anchored to the sentence that states the suite size. The
+    page also says ``10 tests``, ``100 tests`` and ``1000 tests`` in the
+    multiple-testing table, where they are hypothesis counts, and an unanchored
+    search worked only because the suite-size sentence happened to come first.
+    Reword that sentence and the old pattern reported "the README says 100
+    tests", which reads as a stale suite size and is the haircut example.
     """
-    claimed = re.search(r"([\d,]+) tests", README.read_text(encoding="utf-8"))
+    claimed = re.search(r"Behind them: ([\d,]+) tests", README.read_text(encoding="utf-8"))
     assert claimed is not None, "the README no longer states a suite size"
     stated = int(claimed.group(1).replace(",", ""))
     collected = subprocess.run(
