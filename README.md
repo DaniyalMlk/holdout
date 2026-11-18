@@ -91,7 +91,7 @@ integer, where the estimator steps, so a third decimal place would be a fact
 about the BLAS underneath.
 
 ```bash
-python examples/evidence.py     # all nine, non-zero if a figure moves
+python examples/evidence.py     # all ten, non-zero if a figure moves
 ```
 
 Behind them: 1,149 tests on Python 3.10 through 3.13, with SciPy used in the
