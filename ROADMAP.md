@@ -1012,3 +1012,37 @@ statement, so those paths were carried by reading until now. They are run
 against a source string written for the purpose, with the exclusions asserted as
 well as the inclusions — a probe that counted imports would report every module
 as failing to declare `math`.
+
+## Phase 26 — What is simply not here
+
+- [x] A known-gaps section on the front page, separating plain absences from
+      the deliberate refusals documented elsewhere on it
+- [x] Four lines, each found on the public surface and confirmed by calling it:
+      the model confidence set's missing semi-quadratic statistic, a selection
+      interval that cannot be given the correlation `selection_coverage`
+      measures, Sharpe tests with no serial-correlation argument, and a drawdown
+      law that reads a record only through its drift and volatility
+- [x] One predicate per line in `tests/test_known_gaps.py`, each calling an
+      entry point or pinning a signature's exact parameters, so the feature
+      arriving under any name fails its line; page and predicates must agree in
+      content and order
+- [x] The suite-size guard anchored to the sentence that states the suite size,
+      because the page also says `10 tests`, `100 tests` and `1000 tests` where
+      they count hypotheses
+
+### What was left off, and why
+
+A single Sharpe ratio admits only the single-step haircuts. That looks like a
+gap and is a refusal: Holm and the false-discovery procedures depend on the rest
+of the family, and `haircut_sharpe_ratios` takes the family. All three bootstrap
+tests use the stationary bootstrap and offer no other scheme; that is the
+resampling the papers they implement use, documented as the design, and a list
+that counted it would be counting choices.
+
+### A break that tested nothing
+
+The drawdown predicate was first broken by making the law's expected drawdown
+depend on a variable that does not exist in `assess_drawdown`. The test failed,
+with a `NameError`, which proves the code crashed and says nothing about whether
+the predicate can see a dependence on the tails. Redone against the real local,
+a relative change of 3e-8 in the expected drawdown is caught.
