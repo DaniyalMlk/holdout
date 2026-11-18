@@ -1276,6 +1276,35 @@ at machine precision too. Compared against `erfc` below the crossover, where
 both are accurate, the series' own error is 7.3e-10 at `z = 8` and 2.8e-16 at
 20 — so by the time it is used it is already exact.
 
+## Known gaps
+
+Absences, not refusals. Much of what this library declines to do it declines on
+purpose, and those decisions are documented where they belong: a single Sharpe
+ratio admits only single-step haircuts, `RANGE` refuses duplicated columns, and
+the drawdown exceedance is not a p-value when the drift and volatility are
+fitted to the same path. The list below is the other thing, what is simply not
+here.
+
+`tests/test_known_gaps.py` holds one predicate per line, each calling an entry
+point or asserting the shape of a public type. A line that stops being true
+fails, and so does a line that stops being here.
+
+- **The model confidence set has two of its three statistics.** `Statistic` is
+  `MAX` and `RANGE`; Hansen, Lunde and Nason also define a semi-quadratic one,
+  and `model_confidence_set` refuses it.
+- **The selection interval assumes independent candidates.** `selection_coverage`
+  takes a `correlation` and measures what it does to coverage, but
+  `selection_inference` and `conditional_interval` cannot be given one, so the
+  interval for a sweep over neighbouring parameters is computed as though they
+  were unrelated.
+- **The Sharpe tests take no serial correlation.** `probabilistic_sharpe_ratio`,
+  `deflated_sharpe_ratio` and `minimum_track_record_length` correct for skewness
+  and kurtosis and have no argument for the autocorrelation that
+  `serial_correlation_factor` measures.
+- **There is one drawdown law, and it is Brownian.** `assess_drawdown` reads a
+  record only through its drift and volatility, so a fat-tailed record, or the
+  same returns in another order, owes the same drawdown to luck.
+
 ## Layout
 
 | Module | Contents |
