@@ -195,6 +195,62 @@ def test_the_prose_counts_the_rows_it_actually_discusses(readme: str) -> None:
     )
 
 
+#: Count words as the section spells them, lower-cased.
+NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
+
+
+def stated_count(pattern: str, text: str) -> int:
+    """The count word one sentence of the section uses, as a number."""
+    found = re.search(pattern, text)
+    assert found is not None, f"the section no longer says {pattern!r}"
+    word = found.group(1).lower()
+    assert word in NUMBER_WORDS, f"unexpected count word {word!r} in {found.group(0)!r}"
+    return NUMBER_WORDS[word]
+
+
+def test_every_count_the_section_states_is_the_number_of_rows(
+    evidence: dict[str, Any], readme: str
+) -> None:
+    """The section says how many rows it has five times, and all five are read.
+
+    The test above recomputes "Five rows are worth a second look". The rest
+    were typed: the opening's "these ten" and "All ten", its partition into
+    six, two and two, and the comment on the command that regenerates the
+    table, which said "all nine" over a script rendering ten. Each is now
+    compared with the rows the script renders, and the partition with their
+    sum.
+    """
+    rows = len(evidence["rendered"])
+    section = readme.split("## What is checked, and against what", 1)[1].split("\n## ", 1)[0]
+    # Line breaks fall wherever the paragraph wraps, so read it as one line.
+    prose = " ".join(section.split())
+
+    assert stated_count(r"of these (\w+) compare", prose) == rows
+    assert stated_count(r"\b(\w+) are produced by `examples/evidence\.py`", prose) == rows
+    assert stated_count(r"python examples/evidence\.py +# all (\w+),", section) == rows
+
+    against = stated_count(r"(\w+) of these \w+ compare the library against a reference", prose)
+    itself = stated_count(r"(\w+) are claims the library has to hold against itself", prose)
+    results = stated_count(r"the last (\w+) are results rather than checks", prose)
+    assert against + itself + results == rows, (
+        f"the section splits its rows {against} + {itself} + {results}, "
+        f"and the script renders {rows}"
+    )
+
+
 def test_the_suite_size_on_the_front_page_is_not_wildly_stale() -> None:
     """A loose bound, deliberately.
 
