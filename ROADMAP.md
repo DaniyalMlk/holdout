@@ -1046,3 +1046,21 @@ depend on a variable that does not exist in `assess_drawdown`. The test failed,
 with a `NameError`, which proves the code crashed and says nothing about whether
 the predicate can see a dependence on the tails. Redone against the real local,
 a relative change of 3e-8 in the expected drawdown is caught.
+
+## Phase 27 — Every count the evidence section states
+
+- [x] The comment on the command that regenerates the evidence table said
+      "all nine" over a script rendering ten, two paragraphs below a sentence
+      saying "All ten"
+- [x] Every count the section states read off the page and compared with the
+      rows the script renders: "these ten", "All ten" and the command comment
+      directly, and the partition into six checks against references, two
+      against the library itself and two results by their sum
+- [x] Each of those counts broken by one in turn, and each break failing
+
+### Why one count was checked and four were not
+
+"Three rows are worth a second look" went stale once, above four paragraphs, and
+the test written then recomputed that sentence. A test written for the count
+that broke protects that count. The other four sat in the same section and were
+written by the same hand, and one of them was already wrong.
