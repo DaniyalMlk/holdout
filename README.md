@@ -105,13 +105,12 @@ holdout sample-data --out sample
 holdout pbo sample/sweep.csv
 ```
 
-> **Not on the package index yet.** The `pip install holdout-backtest` line above is
-> what it will be; until the first release lands, install from source and the
-> commands under it work unchanged:
->
-> ```bash
-> pip install "git+https://github.com/DaniyalMlk/holdout.git"
-> ```
+For anything merged since the last release, install the tip of `main` from the
+repository:
+
+```bash
+pip install "git+https://github.com/DaniyalMlk/holdout.git"
+```
 
 **The distribution is `holdout-backtest`; the import is `holdout`.** `pip
 install holdout` fetches an unrelated project that was on the index first. The

@@ -65,7 +65,8 @@ many splits of the data, and many strategies tested against one benchmark.
 - [x] `--version` checked against the packaged metadata, not just printed
 - [x] Metadata tests: version agreement, typing marker, entry points, licence
 - [x] Tag-driven release with a version guard and no stored credential
-- [ ] First release on the index
+- [x] First release on the index: 0.1.0, wheel and sdist, from the tag-driven
+      workflow
 
 ## Phase 9 — A confidence set, with no benchmark to nominate
 
