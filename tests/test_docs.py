@@ -168,6 +168,8 @@ def test_the_reference_probe_reads_what_is_there(roadmap: str) -> None:
         (19, 18),
         (21, 19),
         (22, 21),
+        (28, 8),
+        (28, 8),
     ]
 
 
