@@ -65,7 +65,8 @@ many splits of the data, and many strategies tested against one benchmark.
 - [x] `--version` checked against the packaged metadata, not just printed
 - [x] Metadata tests: version agreement, typing marker, entry points, licence
 - [x] Tag-driven release with a version guard and no stored credential
-- [ ] First release on the index
+- [x] First release on the index: 0.1.0, wheel and sdist, from the tag-driven
+      workflow
 
 ## Phase 9 — A confidence set, with no benchmark to nominate
 
@@ -1064,3 +1065,23 @@ a relative change of 3e-8 in the expected drawdown is caught.
 the test written then recomputed that sentence. A test written for the count
 that broke protects that count. The other four sat in the same section and were
 written by the same hand, and one of them was already wrong.
+
+## Phase 28 — The front page knew there had been a release
+
+The install section opened with "Not on the package index yet" weeks after
+0.1.0 was on the index, and phase 8 still had its release item open. Both
+documents were wrong together, which is consistent, so nothing that compares
+them could have seen it.
+
+- [x] The install section saying the package is on the index, with installing
+      from `main` kept for work merged since the last release
+- [x] Phase 8's release item checked
+- [x] The release pinned as recorded, since a published version is permanent,
+      and the install section held to agreeing with it
+- [x] The roadmap's numbering held to no duplicate, no gap and no descent, with
+      every cross-reference naming an earlier phase that exists
+- [x] Every rule tested against text built for it, including the install
+      section being read alone so a quotation further down the page is not a
+      claim
+- [x] Six ways of breaking it confirmed to fail first, `main`'s own documents
+      before this change among them
