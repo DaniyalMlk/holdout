@@ -1085,3 +1085,30 @@ them could have seen it.
       claim
 - [x] Six ways of breaking it confirmed to fail first, `main`'s own documents
       before this change among them
+
+## Phase 29 — One alias, one definition
+
+`FloatArray` was defined in `series` and again in `selection`, and
+`IndexArray` in `splits` and again in `uniqueness`, each copy declared public
+by its module: four objects for two types. The root bound `uniqueness`'s
+`IndexArray`, while `Split` and `CombinatorialPurgedCV` declared their index
+fields with the one in `splits`.
+
+- [x] Both aliases defined once, in `series`, and imported wherever they are
+      used
+- [x] A surface check that two modules declaring one name bind the same
+      object, since the root's `__all__` is a set of strings and two
+      declarations of one name collapse into a single entry
+- [x] `tests/test_signatures.py`: every package class and alias a reachable
+      signature or root-class field is written in is bound at the root,
+      compared by identity, with each spelled name resolved in the module
+      that wrote it
+- [x] Four ways of breaking it confirmed to fail first, the state before this
+      change among them
+
+### Equal is not the same
+
+The copies were equal types, so mypy accepted every mixture of them and no
+call ever failed. What was wrong is that the package said one thing four ways,
+and the root could carry only one of each. The collision check compares
+identity for that reason: equal objects under one name still collide.
