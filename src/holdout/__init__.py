@@ -115,6 +115,7 @@ from .sequential import (
 from .series import (
     CONSTANT_TOLERANCE,
     FloatArray,
+    IndexArray,
     as_matrix,
     as_returns,
     check_labels,
@@ -175,7 +176,6 @@ from .trials import (
 )
 from .uniqueness import (
     Concurrency,
-    IndexArray,
     SequentialDraw,
     average_uniqueness,
     concurrency,
