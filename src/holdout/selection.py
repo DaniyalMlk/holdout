@@ -101,16 +101,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import NDArray
 
 from .exceptions import InsufficientDataError, ValidationError
-
-FloatArray = NDArray[np.float64]
+from .series import FloatArray
 
 __all__ = [
     "LOG_TAIL_ASYMPTOTIC_FROM",
     "ConditionalInterval",
-    "FloatArray",
     "Selected",
     "SelectionInference",
     "conditional_interval",

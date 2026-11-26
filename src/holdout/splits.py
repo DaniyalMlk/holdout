@@ -31,14 +31,13 @@ from dataclasses import dataclass, field
 from itertools import combinations
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import ArrayLike
 
 from .exceptions import HoldoutError, InsufficientDataError, ValidationError
-from .series import FloatArray
+from .series import FloatArray, IndexArray
 
 __all__ = [
     "CombinatorialPurgedCV",
-    "IndexArray",
     "LeakageError",
     "Split",
     "combinatorial_purged_cv",
@@ -48,8 +47,6 @@ __all__ = [
     "purged_kfold",
     "walk_forward",
 ]
-
-IndexArray = NDArray[np.int64]
 
 
 class LeakageError(HoldoutError):

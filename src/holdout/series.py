@@ -19,6 +19,7 @@ from .exceptions import InsufficientDataError, ValidationError
 __all__ = [
     "CONSTANT_TOLERANCE",
     "FloatArray",
+    "IndexArray",
     "as_matrix",
     "as_returns",
     "check_labels",
@@ -28,6 +29,7 @@ __all__ = [
 ]
 
 FloatArray = NDArray[np.float64]
+IndexArray = NDArray[np.int64]
 
 #: Multiple of machine epsilon below which a series is treated as constant. The
 #: test has to be *relative*, because the standard deviation of a constant array

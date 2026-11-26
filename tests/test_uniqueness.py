@@ -27,9 +27,9 @@ import numpy as np
 import pytest
 
 from holdout.exceptions import InsufficientDataError, ValidationError
+from holdout.series import IndexArray
 from holdout.splits import purged_kfold
 from holdout.uniqueness import (
-    IndexArray,
     average_uniqueness,
     concurrency,
     drawn_uniqueness,

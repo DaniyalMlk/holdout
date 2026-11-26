@@ -57,15 +57,14 @@ labels have to be bars.
 from __future__ import annotations
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import ArrayLike
 
 from .bootstrap import Seed, as_generator
 from .exceptions import InsufficientDataError, ValidationError
-from .series import FloatArray
+from .series import FloatArray, IndexArray
 
 __all__ = [
     "Concurrency",
-    "IndexArray",
     "SequentialDraw",
     "average_uniqueness",
     "concurrency",
@@ -75,8 +74,6 @@ __all__ = [
     "time_decay_weights",
     "uniqueness_weights",
 ]
-
-IndexArray = NDArray[np.int64]
 
 
 def _bars(start: ArrayLike, end: ArrayLike) -> tuple[IndexArray, IndexArray]:
