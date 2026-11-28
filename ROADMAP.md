@@ -1112,3 +1112,37 @@ The copies were equal types, so mypy accepted every mixture of them and no
 call ever failed. What was wrong is that the package said one thing four ways,
 and the root could carry only one of each. The collision check compares
 identity for that reason: equal objects under one name still collide.
+
+## Phase 30 — The third confidence-set statistic
+
+Closes the first line of phase 26's list.
+
+- [x] `Statistic.SEMI_QUADRATIC`, the sum of squared studentised pairwise
+      differences, eliminating by the range statistic's rule as the paper does
+- [x] Checked against `RANGE` where the two must agree: with two models the
+      statistic is the range statistic squared and the p-values are the same
+      numbers, and with six the elimination order is identical while the step
+      statistics differ
+- [x] The equal-models, coverage and degeneracy tests run under all three
+      statistics, with the figures their docstrings quote measured again
+- [x] `holdout mcs --statistic semi_quadratic`, with the choices read off the
+      enum and a test that the command offers every statistic the library takes
+- [x] The front page's confidence-set table gains the third column, and every
+      row of it is pinned whole to the example that produces it
+- [x] The known-gaps line and its predicate removed together
+
+### A count that nothing recomputed
+
+The coverage test's docstring said the true best model was in the set 120
+times out of 120 under both statistics. On the same seeds it is 119 under
+each, missed on a different replication by each. The assertion is a bound of
+90% and passed either way, so the sentence above it was the only place the
+figure lived and nothing read it.
+
+### Same order, different stopping point
+
+Sharing the elimination rule means the range and semi-quadratic sets can only
+differ in where the sequence stops. On fifteen borderline samples the sum
+stopped later every time it differed, giving the smaller set on eight and the
+same set on seven, because a sum over 45 squared pairs accumulates gaps that no
+single pair is large enough to show.
