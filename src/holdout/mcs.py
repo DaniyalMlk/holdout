@@ -27,14 +27,19 @@ to deny. Conversely a set of one is a strong statement, and worth checking for
 the mundane explanations — a strategy whose returns are on a different scale, or
 one that is an affine transform of another.
 
-**The elimination rule and the test statistic are separate choices**, and the
-paper gives two of each. :attr:`Statistic.MAX` studentises each model's average
-performance against the current set and takes the largest deviation;
-:attr:`Statistic.RANGE` takes the largest studentised difference over all pairs.
-They do not agree on borderline cases: the range statistic is driven by the two
-extremes of the set and so is more affected by one wild model, while the max
-statistic compares everything to the set average and is more affected by the
-composition of the set. Both are here because neither dominates.
+**The elimination rule and the test statistic are separate choices.** The
+paper gives three statistics and two elimination rules. :attr:`Statistic.MAX`
+studentises each model's average performance against the current set and takes
+the largest deviation; :attr:`Statistic.RANGE` takes the largest studentised
+difference over all pairs; :attr:`Statistic.SEMI_QUADRATIC` sums the squares of
+those same pairwise differences. The last two share an elimination rule — drop
+the model with the worst studentised shortfall against any single other — so
+they remove models in the same order and differ only in when they stop. They do
+not agree on borderline cases: the range statistic is driven by the two extremes
+of the set and so is more affected by one wild model, the semi-quadratic one
+accumulates evidence from every pair and so is more affected by many small gaps,
+and the max statistic compares everything to the set average. All three are here
+because none dominates.
 
 **Convention: higher is better.** The input is a matrix of *performance* —
 returns, or negated losses — one column per model, matching the rest of this
@@ -75,6 +80,13 @@ class Statistic(str, Enum):
     #: more sensitive to a single outlying model, because one extreme column
     #: enters every pair it belongs to.
     RANGE = "range"
+    #: ``sum_{i<j} t_ij^2``, the same studentised pairwise differences as
+    #: :attr:`RANGE`, squared and added rather than maximised. Eliminates by the
+    #: same rule as :attr:`RANGE`, so the two drop models in the same order and
+    #: can only disagree about where the sequence stops. A set of many models
+    #: each a little apart is rejected by the sum before any single pair is far
+    #: enough apart for the maximum; one outlying pair counts for less.
+    SEMI_QUADRATIC = "semi_quadratic"
 
 
 @dataclass(frozen=True)
@@ -168,7 +180,10 @@ def _studentised(
       is not cosmetic — dropping it makes the statistic shrink as the set does,
       and the sequence of tests would then get easier to pass for a reason that
       has nothing to do with the models.
-    * ``RANGE`` works on the pairwise differences directly.
+    * ``RANGE`` works on the pairwise differences directly, and
+      ``SEMI_QUADRATIC`` on the same array: it changes how the pairs are
+      combined into one number and nothing else, which is why the per-model
+      scores — and so the elimination order — are shared between them.
 
     The standard errors come from the bootstrap deviations rather than from a
     long-run variance estimator, which is the point of resampling in blocks: the
@@ -202,9 +217,11 @@ def _studentised(
     # Model i's worst studentised shortfall against any single other model, so
     # the elimination rule and the statistic come from the same array.
     per_model = np.max(-t, axis=1)
-    statistic_value = float(np.max(np.abs(t[upper])))
-    null = np.max(np.abs(null_pairs[:, upper[0], upper[1]]), axis=1)
-    return statistic_value, per_model, null
+    pairs = t[upper]
+    null_upper = null_pairs[:, upper[0], upper[1]]
+    if statistic is Statistic.SEMI_QUADRATIC:
+        return float(np.sum(pairs * pairs)), per_model, np.sum(null_upper * null_upper, axis=1)
+    return float(np.max(np.abs(pairs))), per_model, np.max(np.abs(null_upper), axis=1)
 
 
 def _refuse_degenerate(scale: FloatArray, active: NDArray[np.int64]) -> None:

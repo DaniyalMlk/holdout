@@ -30,12 +30,10 @@ import numpy as np
 import pytest
 
 from holdout import (
-    Statistic,
     assess_drawdown,
     conditional_interval,
     deflated_sharpe_ratio,
     minimum_track_record_length,
-    model_confidence_set,
     probabilistic_sharpe_ratio,
     selection_coverage,
     selection_inference,
@@ -53,19 +51,6 @@ def parameters(function: Callable[..., object]) -> tuple[str, ...]:
 
 
 # --- one predicate per line of the list ----------------------------------- #
-
-
-def the_confidence_set_has_two_statistics() -> None:
-    """``MAX`` and ``RANGE`` and nothing else, refused by value and by name."""
-    assert {member.name for member in Statistic} == {"MAX", "RANGE"}
-    performance = np.random.default_rng(0).normal(0.0005, 0.01, (300, 4))
-    for spelling in ("semi_quadratic", "semiquadratic", "sq"):
-        with pytest.raises(ValueError, match="not a valid Statistic"):
-            model_confidence_set(performance, statistic=spelling, n_bootstrap=100, seed=0)
-    # Both statistics that do exist run on the same input, so the refusal is
-    # about the statistic and not about the data.
-    for statistic in Statistic:
-        model_confidence_set(performance, statistic=statistic, n_bootstrap=100, seed=0)
 
 
 def the_selection_interval_assumes_independence() -> None:
@@ -132,10 +117,6 @@ def the_drawdown_law_is_brownian() -> None:
 
 
 GAPS: tuple[tuple[str, Callable[[], None]], ...] = (
-    (
-        "The model confidence set has two of its three statistics.",
-        the_confidence_set_has_two_statistics,
-    ),
     (
         "The selection interval assumes independent candidates.",
         the_selection_interval_assumes_independence,

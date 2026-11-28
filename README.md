@@ -1288,9 +1288,6 @@ here.
 point or asserting the shape of a public type. A line that stops being true
 fails, and so does a line that stops being here.
 
-- **The model confidence set has two of its three statistics.** `Statistic` is
-  `MAX` and `RANGE`; Hansen, Lunde and Nason also define a semi-quadratic one,
-  and `model_confidence_set` refuses it.
 - **The selection interval assumes independent candidates.** `selection_coverage`
   takes a `correlation` and measures what it does to coverage, but
   `selection_inference` and `conditional_interval` cannot be given one, so the
