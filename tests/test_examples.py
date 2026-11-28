@@ -7,6 +7,15 @@ from typing import Any
 import pytest
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+README = EXAMPLES.parent / "README.md"
+
+
+def readme_section(heading: str) -> str:
+    """The README from the heading starting ``heading`` to the next one."""
+    text = README.read_text(encoding="utf-8")
+    start = text.index("\n" + heading) + 1
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end < 0 else text[start:end]
 
 
 def run_example(name: str) -> Any:
@@ -47,7 +56,7 @@ def test_the_model_confidence_set_example_keeps_nearly_everything(
 ) -> None:
     """Both sweeps, and the gap between "made money" and "is the one that did".
 
-    On the driftless sweep every rule survives under both statistics, which is the
+    On the driftless sweep every rule survives under all three statistics, which is the
     right answer to a set of thirty rules over a market with nothing in it. On the
     sweep with a genuine drift the deflated Sharpe ratio is 0.971 — the best rule
     clears the search that produced it — and 29 of the 30 rules are still in the
@@ -57,12 +66,30 @@ def test_the_model_confidence_set_example_keeps_nearly_everything(
     result = run_example("model_confidence_set.py")
     noise, trend = result["noise"], result["trend"]
     assert noise["max"] == noise["models"] == 30
-    assert noise["range"] == 30
+    assert noise["range"] == noise["semi_quadratic"] == 30
     assert noise["deflated"] < 0.95 < trend["deflated"]
     assert trend["max"] >= 25
     assert trend["best"] != noise["best"]
     output = capsys.readouterr().out
     assert "29 of 30 rules are still in the confidence set" in output
+    # The front page's table is this run, row by row, so no figure in it can move
+    # without this failing. Each row is pinned whole, so a figure cannot pass by
+    # appearing in some other row or further down the page.
+    section = readme_section("## The model confidence set")
+    for label, sweep, emphasised in (
+        ("no drift in the market", noise, False),
+        ("a genuine slow drift", trend, True),
+    ):
+        models = sweep["models"]
+        default = f"{sweep['max']} of {models}"
+        cells = [
+            label,
+            f"{sweep['deflated']:.3f}",
+            f"**{default}**" if emphasised else default,
+            f"{sweep['range']} of {models}",
+            f"{sweep['semi_quadratic']} of {models}",
+        ]
+        assert "| " + " | ".join(cells) + " |" in section.splitlines()
 
 
 def test_the_sharpe_difference_example_measures_both_tests_size(

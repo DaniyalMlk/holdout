@@ -35,7 +35,7 @@ def summarise(name: str, trend: float, seed: int) -> dict[str, Any]:
     effective = effective_number_of_trials(trial_correlation(values), method="eigenvalue")
     deflated = deflate_trials(values, n_trials=effective)
     sets = {}
-    for statistic in (Statistic.MAX, Statistic.RANGE):
+    for statistic in Statistic:
         result = model_confidence_set(
             values,
             alpha=0.10,
@@ -51,8 +51,9 @@ def summarise(name: str, trend: float, seed: int) -> dict[str, Any]:
     print(f"\n{name}: {len(names)} rules over {values.shape[0]} periods")
     print(f"  best by mean:            {reference.names[reference.best]}")
     print(f"  deflated Sharpe ratio:   {deflated.deflated:.3f}")
-    for statistic, result in sets.items():
-        print(f"  set at 10%, {statistic:>5} statistic: {result.included.size} of {len(names)}")
+    for key, result in sets.items():
+        label = key.replace("_", "-")
+        print(f"  set at 10%, {label:>14} statistic: {result.included.size} of {len(names)}")
     if inside.size > 1:
         spread = (reference.performance[inside[0]] - reference.performance[inside[-1]]) * 252.0
         print(f"  annualised mean across the surviving set spans {spread:.1%}")
@@ -60,6 +61,7 @@ def summarise(name: str, trend: float, seed: int) -> dict[str, Any]:
         "deflated": deflated.deflated,
         "max": reference.included.size,
         "range": sets[Statistic.RANGE.value].included.size,
+        "semi_quadratic": sets[Statistic.SEMI_QUADRATIC.value].included.size,
         "models": len(names),
         "best": reference.names[reference.best],
     }
