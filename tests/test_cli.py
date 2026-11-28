@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -7,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from holdout.cli import main
+from holdout import Statistic
+from holdout.cli import build_parser, main
 
 
 @pytest.fixture(scope="module")
@@ -150,6 +152,34 @@ def test_mcs_takes_the_range_statistic_too(
         "300",
     )
     assert "range statistic" in out
+
+
+def test_mcs_takes_the_semi_quadratic_statistic(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = run(
+        capsys,
+        "mcs",
+        str(sample / "trending.csv"),
+        "--statistic",
+        "semi_quadratic",
+        "--bootstrap",
+        "300",
+    )
+    assert "semi-quadratic statistic" in out
+    lines = [line for line in out.splitlines() if line.endswith((" in", " out"))]
+    assert len(lines) == 30
+
+
+def test_mcs_offers_every_statistic_the_library_takes() -> None:
+    """The choices are read off the enum, so a fourth statistic cannot be missed."""
+    parser = build_parser()
+    commands = next(
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+    )
+    mcs = commands.choices["mcs"]
+    statistic = next(action for action in mcs._actions if action.dest == "statistic")
+    assert statistic.choices == [member.value for member in Statistic]
 
 
 def test_errors_are_reported_without_a_traceback(
