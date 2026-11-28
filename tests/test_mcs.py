@@ -20,7 +20,10 @@ from holdout import ValidationError
 from holdout.mcs import Statistic, model_confidence_set
 
 T, K, B = 500, 8, 300
-BOTH = [Statistic.MAX, Statistic.RANGE]
+ALL = list(Statistic)
+#: The two statistics built on studentised pairwise differences, which share an
+#: elimination rule and a refusal of a pair with no standard error between them.
+PAIRWISE = [Statistic.RANGE, Statistic.SEMI_QUADRATIC]
 
 
 def equally_good(generator: np.random.Generator, models: int = K) -> NDArray[np.float64]:
@@ -45,15 +48,16 @@ def one_clear_winner(generator: np.random.Generator) -> NDArray[np.float64]:
 # -- the two things it has to get right --------------------------------------
 
 
-@pytest.mark.parametrize("statistic", BOTH)
+@pytest.mark.parametrize("statistic", ALL)
 def test_equally_good_models_are_nearly_all_retained(statistic: Statistic) -> None:
     """Nothing separates them, so the set should say so.
 
     The assertion is on the average size over twenty draws rather than on one,
     because a single set of eight can lose one model to an unlucky sample without
     anything being wrong. Measured over those twenty draws: 7.85 of 8 under the
-    max statistic and 7.80 under the range, with the smallest set seven in both
-    cases. Nothing is separated because nothing differs, which is the answer.
+    max statistic, 7.80 under the range and 7.75 under the semi-quadratic, with
+    the smallest set seven under the first two and six under the third. Nothing
+    is separated because nothing differs, which is the answer.
     """
     generator = np.random.default_rng(11)
     sizes = []
@@ -70,7 +74,7 @@ def test_equally_good_models_are_nearly_all_retained(statistic: Statistic) -> No
     assert min(sizes) >= 4
 
 
-@pytest.mark.parametrize("statistic", BOTH)
+@pytest.mark.parametrize("statistic", ALL)
 def test_a_clear_winner_and_its_copies_survive_and_the_rest_do_not(
     statistic: Statistic,
 ) -> None:
@@ -93,7 +97,7 @@ def test_a_clear_winner_and_its_copies_survive_and_the_rest_do_not(
 # -- coverage, by simulation -------------------------------------------------
 
 
-@pytest.mark.parametrize("statistic", BOTH)
+@pytest.mark.parametrize("statistic", ALL)
 def test_the_best_model_is_in_the_set_at_least_one_minus_alpha_of_the_time(
     statistic: Statistic,
 ) -> None:
@@ -104,7 +108,9 @@ def test_the_best_model_is_in_the_set_at_least_one_minus_alpha_of_the_time(
     sample ordering would look fine on the two tests above and fail here.
 
     Measured over 120 replications at ``alpha = 0.10``: the true best model was in
-    the set 120 times out of 120 under both statistics. The bound is asymptotic
+    the set 119 times out of 120 under the max and the range statistics, missed
+    on a different replication by each, and 118 times under the semi-quadratic,
+    whose two misses include the range statistic's one. The bound is asymptotic
     and one-sided, so over-coverage is expected and is not a defect: the set is
     conservative because the elimination sequence stops at the first failure to
     reject rather than testing every subset.
@@ -242,24 +248,26 @@ def test_losses_passed_without_negating_select_the_worst_models() -> None:
     assert set(right.included.tolist()).isdisjoint(set(wrong.included.tolist()))
 
 
-def test_a_duplicated_column_is_refused_by_the_range_statistic() -> None:
+@pytest.mark.parametrize("statistic", PAIRWISE)
+def test_a_duplicated_column_is_refused_by_the_pairwise_statistics(statistic: Statistic) -> None:
     """Their difference has zero variance in every resample, so nothing to divide by."""
     generator = np.random.default_rng(20)
     values = generator.normal(size=(300, 3))
     values[:, 2] = values[:, 1]
     with pytest.raises(ValidationError, match="no standard error"):
-        model_confidence_set(
-            values, statistic=Statistic.RANGE, n_bootstrap=B, block_length=3, seed=7
-        )
+        model_confidence_set(values, statistic=statistic, n_bootstrap=B, block_length=3, seed=7)
 
 
-def test_a_column_that_is_another_plus_a_constant_is_refused_by_the_range() -> None:
+@pytest.mark.parametrize("statistic", PAIRWISE)
+def test_a_column_that_is_another_plus_a_constant_is_refused_pairwise(
+    statistic: Statistic,
+) -> None:
     """Not equal to it, and still without a standard error between them.
 
     The difference is 0.3 in every period, so it is 0.3 in every resample and the
     pairwise standard error is zero — the second model is better with certainty
     rather than with a measurable margin. Studentising that gives infinity, so the
-    range statistic refuses rather than eliminating a model on a p-value of zero.
+    range and semi-quadratic statistics refuse rather than eliminating a model on a p-value of zero.
 
     The max statistic does not refuse, and should not: it never forms that pairwise
     standard error, and a column 0.3 above another really is the better of the two.
@@ -270,16 +278,17 @@ def test_a_column_that_is_another_plus_a_constant_is_refused_by_the_range() -> N
     values = generator.normal(size=(300, 3))
     values[:, 2] = values[:, 1] + 0.3
     with pytest.raises(ValidationError, match="no standard error"):
-        model_confidence_set(
-            values, statistic=Statistic.RANGE, n_bootstrap=B, block_length=3, seed=8
-        )
+        model_confidence_set(values, statistic=statistic, n_bootstrap=B, block_length=3, seed=8)
     under_max = model_confidence_set(
         values, statistic=Statistic.MAX, n_bootstrap=B, block_length=3, seed=8
     )
     assert under_max.included.tolist() == [2]
 
 
-def test_a_standard_error_of_zero_is_detected_relative_to_the_others() -> None:
+@pytest.mark.parametrize("statistic", PAIRWISE)
+def test_a_standard_error_of_zero_is_detected_relative_to_the_others(
+    statistic: Statistic,
+) -> None:
     """The reason the guard is not ``scale > 0``, which is the obvious version.
 
     Two identical columns have means that differ in the last bits of the mantissa
@@ -294,9 +303,7 @@ def test_a_standard_error_of_zero_is_detected_relative_to_the_others() -> None:
     values = generator.normal(size=(300, 3))
     values[:, 2] = values[:, 1] + 0.0
     with pytest.raises(ValidationError, match="floating-point error"):
-        model_confidence_set(
-            values, statistic=Statistic.RANGE, n_bootstrap=B, block_length=3, seed=8
-        )
+        model_confidence_set(values, statistic=statistic, n_bootstrap=B, block_length=3, seed=8)
 
 
 def test_the_max_statistic_tolerates_a_duplicated_column() -> None:
@@ -322,11 +329,11 @@ def test_the_max_statistic_tolerates_a_duplicated_column() -> None:
     assert result.pvalues[1] == pytest.approx(result.pvalues[2])
 
 
-def test_every_column_identical_is_refused_by_both() -> None:
+def test_every_column_identical_is_refused_by_all_three() -> None:
     """The one degeneracy the max statistic does see: no spread at all."""
     generator = np.random.default_rng(27)
     values = np.tile(generator.normal(size=(300, 1)), (1, 3))
-    for statistic in BOTH:
+    for statistic in ALL:
         with pytest.raises(ValidationError, match="no standard error"):
             model_confidence_set(values, statistic=statistic, n_bootstrap=B, block_length=3, seed=9)
 
@@ -405,7 +412,7 @@ def test_the_range_statistic_gives_the_smaller_set_on_borderline_data() -> None:
             )
         )
     sizes = {}
-    for statistic in BOTH:
+    for statistic in ALL:
         sizes[statistic] = [
             model_confidence_set(
                 values, statistic=statistic, n_bootstrap=B, block_length=4, seed=31
@@ -416,3 +423,75 @@ def test_the_range_statistic_gives_the_smaller_set_on_borderline_data() -> None:
     narrow = sizes[Statistic.RANGE]
     assert sum(narrow) / len(narrow) < sum(wide) / len(wide) - 0.5
     assert sum(a <= b for a, b in zip(narrow, wide, strict=True)) >= 13
+    # The semi-quadratic statistic, measured on the same fifteen samples: 5.80
+    # models on average, no more than the range set on all fifteen and fewer on
+    # eight. It drops models in the range statistic's order, so the two sets
+    # differ only in where the sequence stops, and a sum over 45 squared pairs
+    # stops later.
+    summed = sizes[Statistic.SEMI_QUADRATIC]
+    assert sum(summed) / len(summed) < sum(narrow) / len(narrow) - 0.5
+    assert sum(a <= b for a, b in zip(summed, narrow, strict=True)) >= 14
+
+
+# -- the semi-quadratic statistic, where it must agree with the range -----------
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_with_two_models_the_semi_quadratic_statistic_is_the_range_squared(seed: int) -> None:
+    """One pair, so the sum of squares is the square of the only term.
+
+    Squaring is monotone on the absolute value, so the bootstrap ranks the
+    statistic against its null exactly as the range statistic does and the
+    p-values are the same numbers, not merely close ones. That is a check a wrong
+    reduction fails: summing over both triangles would double the statistic and
+    the null alike and pass it, but summing the null over the wrong axis, or
+    squaring before taking the pair, would not.
+    """
+    generator = np.random.default_rng(300 + seed)
+    values = generator.normal(size=(400, 2)) + np.array([0.0, 0.08])
+    ranged = model_confidence_set(
+        values, statistic=Statistic.RANGE, n_bootstrap=B, block_length=3, seed=seed
+    )
+    summed = model_confidence_set(
+        values, statistic=Statistic.SEMI_QUADRATIC, n_bootstrap=B, block_length=3, seed=seed
+    )
+    assert len(ranged.eliminations) == len(summed.eliminations) == 1
+    (one,), (other,) = ranged.eliminations, summed.eliminations
+    assert other.statistic == pytest.approx(one.statistic**2, rel=1e-12, abs=0.0)
+    assert other.step_pvalue == one.step_pvalue
+    assert other.model == one.model
+    assert summed.pvalues.tolist() == ranged.pvalues.tolist()
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_the_semi_quadratic_statistic_eliminates_in_the_range_order(seed: int) -> None:
+    """The same rule, so the same order; only the step p-values differ.
+
+    Asserted on sets wide enough apart that every step runs, and with the step
+    statistics required to differ, so a semi-quadratic path that was secretly the
+    range path cannot pass it.
+    """
+    generator = np.random.default_rng(400 + seed)
+    values = generator.normal(size=(400, 6)) + np.linspace(0.0, 0.3, 6)
+    ranged = model_confidence_set(
+        values, statistic=Statistic.RANGE, n_bootstrap=B, block_length=3, seed=seed
+    )
+    summed = model_confidence_set(
+        values, statistic=Statistic.SEMI_QUADRATIC, n_bootstrap=B, block_length=3, seed=seed
+    )
+    assert [s.model for s in summed.eliminations] == [s.model for s in ranged.eliminations]
+    assert [s.size for s in summed.eliminations] == [6, 5, 4, 3, 2]
+    first_ranged, first_summed = ranged.eliminations[0], summed.eliminations[0]
+    # Fifteen pairs: the sum exceeds the largest square unless all but one are nil.
+    assert first_summed.statistic > first_ranged.statistic**2
+    assert summed.statistic is Statistic.SEMI_QUADRATIC
+
+
+def test_the_semi_quadratic_statistic_is_spelled_as_its_value() -> None:
+    """The string form is what the command line and a config file pass."""
+    generator = np.random.default_rng(29)
+    values = generator.normal(size=(300, 3))
+    by_name = model_confidence_set(
+        values, statistic="semi_quadratic", n_bootstrap=B, block_length=3, seed=1
+    )
+    assert by_name.statistic is Statistic.SEMI_QUADRATIC

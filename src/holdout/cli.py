@@ -562,7 +562,7 @@ def _cmd_mcs(args: argparse.Namespace) -> int:
     )
     print(f"{len(table.names)} models, {table.values.shape[0]} periods")
     print(
-        f"{args.statistic} statistic, block length {result.block_length:.1f}, "
+        f"{args.statistic.replace('_', '-')} statistic, block length {result.block_length:.1f}, "
         f"{args.bootstrap} bootstrap samples, seed {args.seed}"
     )
     included = set(result.included.tolist())
@@ -972,10 +972,11 @@ def build_parser() -> argparse.ArgumentParser:
     with_file(p)
     p.add_argument(
         "--statistic",
-        choices=[Statistic.MAX.value, Statistic.RANGE.value],
+        choices=[member.value for member in Statistic],
         default=Statistic.MAX.value,
         help="max compares each model to the set average, range takes the largest "
-        "studentised pair (default: max)",
+        "studentised pair, semi_quadratic sums the squares of every pair "
+        "(default: max)",
     )
     p.add_argument(
         "--bootstrap",

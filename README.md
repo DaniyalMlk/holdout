@@ -94,7 +94,7 @@ about the BLAS underneath.
 python examples/evidence.py     # all ten, non-zero if a figure moves
 ```
 
-Behind them: 1,190 tests on Python 3.10 through 3.13, with SciPy used in the
+Behind them: 1,208 tests on Python 3.10 through 3.13, with SciPy used in the
 suite as an independent reference and never as an implementation.
 
 ## Install
@@ -635,6 +635,7 @@ result.included  # indices in the set, best average first
 result.pvalues  # one per model; in the set when above alpha
 result.at(0.25)  # any other level, without rerunning the bootstrap
 model_confidence_set(returns, statistic=Statistic.RANGE, seed=0)
+model_confidence_set(returns, statistic=Statistic.SEMI_QUADRATIC, seed=0)
 ```
 
 Everything above needs a benchmark. This does not, which is why it answers the
@@ -653,10 +654,10 @@ procedure failing; it is the procedure saying that ten years of daily data canno
 separate 29 parameter choices. `examples/model_confidence_set.py` is exactly
 that case, and it is the uncomfortable one:
 
-| Sweep | deflated Sharpe | set at 10% (max) | set at 10% (range) |
-| --- | --- | --- | --- |
-| no drift in the market | 0.622 | 30 of 30 | 30 of 30 |
-| a genuine slow drift | 0.971 | **29 of 30** | 30 of 30 |
+| Sweep | deflated Sharpe | set at 10% (max) | set at 10% (range) | set at 10% (semi-quadratic) |
+| --- | --- | --- | --- | --- |
+| no drift in the market | 0.622 | 30 of 30 | 30 of 30 | 30 of 30 |
+| a genuine slow drift | 0.971 | **29 of 30** | 30 of 30 | 27 of 30 |
 
 The second row has a real signal in it — the best rule clears the search that
 produced it — and the surviving set still spans 9.3% of annualised mean return.
@@ -668,16 +669,20 @@ asymmetry of hypothesis testing runs backwards, and the default of 0.10 follows
 the paper rather than the 0.05 habit. One bootstrap produces every level, since
 the p-values do not depend on it — only the reading of them does.
 
-**Both statistics are here because neither dominates.** `MAX` studentises each
-model against the average of the set; `RANGE` takes the largest studentised
-difference over all pairs. Over fifteen borderline samples of ten models they
-retained 8.13 and 7.07 models on average, the range set smaller on fourteen of
-the fifteen and larger on one — a tendency and not a guarantee. `MAX` is the
-default because a larger set is the weaker claim.
+**All three statistics are here because none dominates.** `MAX` studentises
+each model against the average of the set; `RANGE` takes the largest studentised
+difference over all pairs; `SEMI_QUADRATIC` sums the squares of those same pairs.
+The last two share an elimination rule, so they drop models in the same order and
+differ only in where they stop: one wild pair moves the range, many small gaps
+move the sum. Over fifteen borderline samples of ten models they retained 8.13,
+7.07 and 5.80 models on average. The range set was smaller than the max set on
+fourteen of the fifteen and larger on one, and the semi-quadratic set was never
+larger than the range set and smaller on eight — tendencies and not guarantees.
+`MAX` is the default because a larger set is the weaker claim.
 
 They also differ on degeneracy, and the difference is real rather than an
 oversight. Two duplicated columns have no standard error between them, so `RANGE`
-refuses; `MAX` never forms that pairwise error and carries on, giving both copies
+and `SEMI_QUADRATIC` refuse; `MAX` never forms that pairwise error and carries on, giving both copies
 the same p-value. What it cannot then do is tell the caller that three of its ten
 "models" are one strategy implemented three times.
 
@@ -1279,18 +1284,15 @@ both are accurate, the series' own error is 7.3e-10 at `z = 8` and 2.8e-16 at
 
 Absences, not refusals. Much of what this library declines to do it declines on
 purpose, and those decisions are documented where they belong: a single Sharpe
-ratio admits only single-step haircuts, `RANGE` refuses duplicated columns, and
-the drawdown exceedance is not a p-value when the drift and volatility are
-fitted to the same path. The list below is the other thing, what is simply not
-here.
+ratio admits only single-step haircuts, the pairwise confidence-set statistics
+refuse duplicated columns, and the drawdown exceedance is not a p-value when the
+drift and volatility are fitted to the same path. The list below is the other
+thing, what is simply not here.
 
 `tests/test_known_gaps.py` holds one predicate per line, each calling an entry
 point or asserting the shape of a public type. A line that stops being true
 fails, and so does a line that stops being here.
 
-- **The model confidence set has two of its three statistics.** `Statistic` is
-  `MAX` and `RANGE`; Hansen, Lunde and Nason also define a semi-quadratic one,
-  and `model_confidence_set` refuses it.
 - **The selection interval assumes independent candidates.** `selection_coverage`
   takes a `correlation` and measures what it does to coverage, but
   `selection_inference` and `conditional_interval` cannot be given one, so the
